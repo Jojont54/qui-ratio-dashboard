@@ -4,8 +4,7 @@ services:
     ports:
       - "8787:8787"
     environment:
-      QUI_BASE_URL: "http://${IP}:7476"
-      HOMARR_BASE: http://${IP}:7575" \
+      QUI_BASE_URL: "http://${QUI_IP}:7476"
       QUI_INSTANCE_ID: "1"
       QUI_API_KEY: "${QUI_API_KEY}"
       BUFFERS_PATH: "/data/buffers.yml"
