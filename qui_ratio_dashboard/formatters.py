@@ -19,7 +19,7 @@ def parse_bytes(v) -> int:
     s = str(v).strip()
     if not s:
         return 0
-    m = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*([A-Za-z]{2,4})$", s)
+    m = re.match(r"^([+-]?[0-9]+(?:\.[0-9]+)?)\s*([A-Za-z]{2,4})$", s)
     if not m:
         try:
             return int(s)
