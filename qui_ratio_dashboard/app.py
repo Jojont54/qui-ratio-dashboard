@@ -90,46 +90,21 @@ def html():
         "<meta name='viewport' content='width=device-width, initial-scale=1'/>",
         "<title>Tracker Ratios</title>",
         "<style>",
-        ":root{",
-        "  /* Homarr v2 (shadcn-ish tokens) + fallbacks */",
-        "  --bg: var(--background, #0f1117);",
-        "  --fg: var(--foreground, #e4e6eb);",
-        "  --card: var(--card, #161b22);",
-        "  --card-fg: var(--card-foreground, #e4e6eb);",
-        "  --muted: var(--muted, #111827);",
-        "  --muted-fg: var(--muted-foreground, #9da5b4);",
-        "  --border: var(--border, rgba(255,255,255,.08));",
-        "  --ring: var(--ring, rgba(255,255,255,.12));",
-        "  --radius: var(--radius, 16px);",
-        "",
-        "  --danger: var(--destructive, #ff4d4f);",
-        "  --warning: var(--warning, #ffb020);",
-        "  --success: var(--success, #3ddc97);",
-        "}",
-        "html,body{margin:0;padding:0}",
-        "body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg);padding:16px}",
-        "h2{margin:0 0 12px 0;font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--fg)}",
-        ".card{background:var(--card);color:var(--card-fg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}",
-        "table{width:100%;border-collapse:collapse}",
-        "thead th{background:color-mix(in oklab, var(--card) 88%, black);color:var(--muted-fg);text-align:left;padding:12px 14px;font-size:12px;font-weight:600;letter-spacing:.02em;border-bottom:1px solid var(--border)}",
-        "tbody td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--border)}",
-        "tbody tr:last-child td{border-bottom:0}",
-        "tbody tr:hover td{background:color-mix(in oklab, var(--card) 92%, white)}",
-        ".mono{font-variant-numeric:tabular-nums;white-space:nowrap}",
-        ".tracker{font-weight:500}",
-        ".badge{display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-weight:650;font-size:12px;line-height:18px}",
-        ".bad{color:var(--danger)}",
-        ".low{color:var(--warning)}",
-        ".ok{color:var(--success)}",
-        ".delta{opacity:.95}",
-        "@media (max-width: 900px){",
-        "  body{padding:12px}",
-        "  th,td{padding:10px 10px}",
-        "  h2{font-size:15px}",
-        "}",
+        "body{font-family:Inter,system-ui,sans-serif;margin:0;padding:20px;background:#242424;color:#e4e6eb}",
+        "h2{margin:0 0 16px 0;font-weight:600;font-size:16px}",
+        "table{width:100%;border-collapse:collapse;background:#2e2e2e;border-radius:12px;overflow:hidden}",
+        "th{text-align:left;padding:14px;background:#2e2e2e;font-size:13px;color:#9da5b4}",
+        "thead{border-bottom:1px solid #424242}",
+        "td{padding:14px;font-size:14px}",
+        "tr{transition:background 0.2s ease}",
+        "tr:hover{background:#242424}",
+        ".bad{color:#ff4d4f;font-weight:600}",
+        ".low{color:#ffb020;font-weight:600}",
+        ".ok{color:#3ddc97;font-weight:600}",
+        ".ratio-bar{height:6px;border-radius:4px;background:#2e2e2e;margin-top:6px;overflow:hidden}",
+        ".ratio-fill{height:100%;border-radius:4px}",
         "</style></head><body>",
-        "<h2>Ratios trackers</h2>",
-        "<div class='card'>",
+        "<h2>Tracker Ratios</h2>",
         "<table><thead><tr>",
         "<th>Tracker</th><th>Upload</th><th>Download</th><th>Ratio</th><th>Delta</th><th>#</th><th>Total</th>",
         "</tr></thead><tbody>",
@@ -145,16 +120,16 @@ def html():
                 cls = "low"
 
         parts.append(
-            f"<tr><td class='tracker'>{r['tracker']}</td>"
-            f"<td class='mono'>{fmt_bytes(r['uploaded'])}</td>"
-            f"<td class='mono'>{fmt_bytes(r['downloaded'])}</td>"
-            f"<td class='mono'><span class='badge {cls}'>{fmt_ratio(ratio)}</span></td>"
-            f"<td class='mono delta'>{fmt_bytes(r['delta'])}</td>"
-            f"<td class='mono'>{r['count']}</td>"
-            f"<td class='mono'>{fmt_bytes(r['total_size'])}</td></tr>"
+            f"<tr><td>{r['tracker']}</td>"
+            f"<td>{fmt_bytes(r['uploaded'])}</td>"
+            f"<td>{fmt_bytes(r['downloaded'])}</td>"
+            f"<td class='{cls}'>{fmt_ratio(ratio)}</td>"
+            f"<td>{fmt_bytes(r['delta'])}</td>"
+            f"<td>{r['count']}</td>"
+            f"<td>{fmt_bytes(r['total_size'])}</td></tr>"
         )
 
-    parts += ["</tbody></table></div></body></html>"]
+    parts += ["</tbody></table></body></html>"]
     return Response("\n".join(parts), mimetype="text/html")
 
 
