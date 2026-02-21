@@ -45,7 +45,7 @@ def fmt_bytes(n: int) -> str:
     n = int(n or 0)
     if n < 1024:
         return f"{n} B"
-    units = ["KiB", "MiB", "GiB", "TiB", "PiB"]
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
     v = float(n)
     i = 0
     while v >= 1024 and i < len(units) - 1:
