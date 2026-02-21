@@ -1,0 +1,12 @@
+services:
+  qui-ratio:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      QUI_BASE_URL: "http://192.168.1.68:7476"
+      QUI_INSTANCE_ID: "1"
+      QUI_API_KEY: "${QUI_API_KEY}"
+      BUFFERS_PATH: "/data/buffers.yml"
+    volumes:
+      - ./buffers.yml:/data/buffers.yml:ro
