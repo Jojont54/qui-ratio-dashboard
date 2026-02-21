@@ -43,15 +43,20 @@ def load_buffers() -> dict:
 
 def fmt_bytes(n: int) -> str:
     n = int(n or 0)
-    if n < 1024:
-        return f"{n} B"
+
+    sign = "-" if n < 0 else ""
+    n = abs(n)
+
     units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
     v = float(n)
     i = 0
+
     while v >= 1024 and i < len(units) - 1:
         v /= 1024
         i += 1
-    return f"{v:.2f} {units[i]}"
+
+    return f"{sign}{v:.2f} {units[i]}"
+
 
 def compute_tracker_rows(payload: dict) -> list[dict]:
     buffers = load_buffers()
