@@ -1,60 +1,6 @@
 trackers:
-  ygg:
-    display: "YGG"
+  tracker_name:
+    display: "Name_Displayed"
     domains:
-      - tracker.p2p-world.net
-  c411:
-    display: "C411"
-    domains:
-      - c411.org
-      
-  la-cale:
-    display: "La-cale"
-    domains:
-      - tracker.la-cale.space
-    
-  sharewood:
-    display: "Sharewood"
-    domains:
-      - www.sharewood.tv
-
-  gf-f:
-    display: "GF-F"
-    domains:
-      - generation-free.org
-      
-  gemini:
-    display: "G3MINI"
-    domains:
-      - gemini-tracker.org
-      
-  torr9:
-    display: "Torr9"
-    domains:
-      - tracker.torr9.com
-      - tracker.torr9.xyz
-      
-  tos:
-    display: "The Old School"
-    domains:
-      - theoldschool.cc
-      
-  abn:
-    display: "ABN"
-    domains:
-      - tracker.abn.lol
-      
-  seedpool:
-    display: "Seedpool"
-    domains:
-      - seedpool.org
-      
-  hdspace:
-    display: "HD-Space"
-    domains:
-      - hd-space.pw
-      
-  oldtoons:
-    display: "OldToons"
-    domains:
-      - oldtoons.world
+      - tracker.address.1
+      - tracker.address.2
