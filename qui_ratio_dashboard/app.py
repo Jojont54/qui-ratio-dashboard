@@ -1,11 +1,68 @@
 import math
-from flask import Flask, jsonify, Response
+import requests
+
+from flask import Flask, jsonify, Response, request, abort
+
 from .qui_client import QuiClient
 from .formatters import compute_tracker_rows, fmt_bytes
-from .config import PORT
+from .config import (
+    PORT,
+    HOMARR_AUTH_ENABLED,
+    HOMARR_BASE_URL,
+    HOMARR_SESSION_ENDPOINT,
+    HTTP_TIMEOUT,
+)
 
 app = Flask(__name__)
 client = QuiClient()
+
+
+def homarr_session_ok() -> bool:
+    """
+    Vérifie si l'utilisateur est authentifié sur Homarr,
+    en appelant Homarr côté serveur avec le cookie du client.
+    """
+    cookie = request.headers.get("Cookie", "")
+    if not cookie:
+        return False
+
+    try:
+        r = requests.get(
+            HOMARR_BASE_URL + HOMARR_SESSION_ENDPOINT,
+            headers={"Cookie": cookie},
+            timeout=HTTP_TIMEOUT,
+            allow_redirects=False,
+        )
+        return r.status_code == 200
+    except requests.RequestException:
+        # fail-closed
+        return False
+
+
+@app.before_request
+def require_homarr_auth():
+    if not HOMARR_AUTH_ENABLED:
+        return
+
+    # Autorise un healthcheck (pratique pour debug / monitoring)
+    if request.path == "/health":
+        return
+
+    if not homarr_session_ok():
+        abort(401)
+
+
+@app.after_request
+def add_headers(resp):
+    # Autoriser l’embed dans ton domaine (ajuste si besoin)
+    resp.headers["Content-Security-Policy"] = "frame-ancestors 'self' https://jojont.fr"
+    return resp
+
+
+@app.get("/health")
+def health():
+    return "ok"
+
 
 @app.get("/api/ratios")
 def api_ratios():
@@ -18,6 +75,7 @@ def api_ratios():
             rr["ratio"] = None
         out.append(rr)
     return jsonify({"trackers": out})
+
 
 @app.get("/")
 def html():
@@ -72,6 +130,7 @@ def html():
 
     parts += ["</tbody></table></body></html>"]
     return Response("\n".join(parts), mimetype="text/html")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
