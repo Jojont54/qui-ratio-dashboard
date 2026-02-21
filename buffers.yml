@@ -1,1 +1,4 @@
-buffers: {}
+buffers:
+  tracker_name:
+    uploaded_add: 100 TiB
+    downloaded_add: 50 TiB

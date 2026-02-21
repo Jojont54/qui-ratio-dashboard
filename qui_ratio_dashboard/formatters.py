@@ -3,6 +3,8 @@ import os
 import re
 import yaml
 from .config import BUFFERS_PATH
+from .config import TRACKERS_PATH
+
 
 _SUFFIX = {
     "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3, "TIB": 1024**4,
@@ -90,3 +92,71 @@ def compute_tracker_rows(payload: dict) -> list[dict]:
 
     rows.sort(key=lambda r: (r["ratio"] if r["ratio"] != math.inf else 1e99))
     return rows
+
+def load_tracker_map():
+    if not os.path.exists(TRACKERS_PATH):
+        return {}, {}
+    data = yaml.safe_load(open(TRACKERS_PATH, "r", encoding="utf-8")) or {}
+    trackers = (data.get("trackers") or {})
+
+    domain_to_key = {}
+    key_to_display = {}
+
+    for key, cfg in trackers.items():
+        key_to_display[key] = cfg.get("display", key)
+        for d in (cfg.get("domains") or []):
+            domain_to_key[d] = key
+
+    return domain_to_key, key_to_display
+
+def compute_tracker_rows(payload: dict) -> list[dict]:
+    buffers = load_buffers()
+    domain_to_key, key_to_display = load_tracker_map()
+
+    transfers = (((payload or {}).get("counts") or {}).get("trackerTransfers")) or {}
+
+    # aggregate by logical key
+    agg = {}
+
+    for domain, s in transfers.items():
+        key = domain_to_key.get(domain, domain)  # if not mapped, keep domain as key
+        up = int(s.get("uploaded", 0))
+        dl = int(s.get("downloaded", 0))
+        total_size = int(s.get("totalSize", 0))
+        count = int(s.get("count", 0))
+
+        if key not in agg:
+            agg[key] = {"uploaded": 0, "downloaded": 0, "total_size": 0, "count": 0}
+
+        agg[key]["uploaded"] += up
+        agg[key]["downloaded"] += dl
+        agg[key]["total_size"] += total_size
+        agg[key]["count"] += count
+
+    rows = []
+    for key, a in agg.items():
+        # buffers can be keyed either by logical key (recommended) or by domain fallback
+        b = buffers.get(key, {"uploaded_add": 0, "downloaded_add": 0})
+
+        up2 = a["uploaded"] + b["uploaded_add"]
+        dl2 = a["downloaded"] + b["downloaded_add"]
+
+        if dl2 <= 0:
+            ratio = math.inf if up2 > 0 else 0.0
+        else:
+            ratio = up2 / dl2
+
+        rows.append({
+            "tracker": key_to_display.get(key, key),  # pretty name if available
+            "uploaded": up2,
+            "downloaded": dl2,
+            "ratio": ratio,
+            "delta": up2 - dl2,
+            "count": a["count"],
+            "total_size": a["total_size"],
+            "_key": key,  # optional: internal key if you want JSON stable
+        })
+
+    rows.sort(key=lambda r: (r["ratio"] if r["ratio"] != math.inf else 1e99))
+    return rows
+

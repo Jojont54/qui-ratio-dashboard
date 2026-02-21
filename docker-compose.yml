@@ -8,5 +8,8 @@ services:
       QUI_INSTANCE_ID: "1"
       QUI_API_KEY: "${QUI_API_KEY}"
       BUFFERS_PATH: "/data/buffers.yml"
+      TRACKERS_PATH: "/data/trackers.yml"
     volumes:
       - ./buffers.yml:/data/buffers.yml:ro
+      - ./trackers.yml:/data/trackers.yml:ro
+
