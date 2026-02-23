@@ -84,6 +84,7 @@ def api_ratios():
 def html():
     payload = client.fetch_torrents_summary()
     rows = compute_tracker_rows(payload)
+    rows = apply_ledger(rows)
 
     def fmt_ratio(x):
         return "∞" if x == math.inf else f"{x:.2f}"
