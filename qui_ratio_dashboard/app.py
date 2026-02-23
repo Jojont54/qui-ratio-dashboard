@@ -5,6 +5,7 @@ from flask import Flask, jsonify, Response, request, abort
 
 from .qui_client import QuiClient
 from .formatters import compute_tracker_rows, fmt_bytes
+from .state_store import apply_ledger
 from .config import (
     PORT,
     HOMARR_AUTH_ENABLED,
@@ -12,6 +13,7 @@ from .config import (
     HOMARR_SESSION_ENDPOINT,
     HTTP_TIMEOUT,
 )
+
 
 app = Flask(__name__)
 client = QuiClient()
@@ -68,6 +70,7 @@ def health():
 def api_ratios():
     payload = client.fetch_torrents_summary()
     rows = compute_tracker_rows(payload)
+    rows = apply_ledger(rows)
     out = []
     for r in rows:
         rr = dict(r)
