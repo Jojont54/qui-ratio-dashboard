@@ -60,13 +60,12 @@ def apply_ledger(rows):
             "prev_d": cur_d,
         })
 
-        # ---- RESET DETECTION ----
+        # ---- RESET / BAISSE DETECTION ----
         if cur_u < t["prev_u"]:
-            # compteur reset -> on ajoute tout le cycle précédent
-            t["buf_u"] += t["prev_u"]
+            t["buf_u"] += (t["prev_u"] - cur_u)
 
         if cur_d < t["prev_d"]:
-            t["buf_d"] += t["prev_d"]
+            t["buf_d"] += (t["prev_d"] - cur_d)
 
         # ---- UPDATE PREVIOUS ----
         t["prev_u"] = cur_u
