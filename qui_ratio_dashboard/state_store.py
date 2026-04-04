@@ -40,35 +40,50 @@ def apply_state_floor(rows):
     for r in rows:
         key = r["_key"] if "_key" in r else r["tracker"]
 
-        cur_raw_u = int(r["uploaded"])
-        cur_raw_d = int(r["downloaded"])
+        # API brute uniquement
+        cur_api_u = int(r["uploaded"])
+        cur_api_d = int(r["downloaded"])
+
+        # Buffer manuel fixe
+        manual_u = int(r.get("manual_buffer_uploaded", 0))
+        manual_d = int(r.get("manual_buffer_downloaded", 0))
 
         t = trackers.setdefault(key, {
-            "prev_raw_u": cur_raw_u,
-            "prev_raw_d": cur_raw_d,
+            "prev_raw_u": cur_api_u,
+            "prev_raw_d": cur_api_d,
         })
 
-        prev_raw_u = int(t.get("prev_raw_u", cur_raw_u))
-        prev_raw_d = int(t.get("prev_raw_d", cur_raw_d))
+        prev_raw_u = int(t.get("prev_raw_u", cur_api_u))
+        prev_raw_d = int(t.get("prev_raw_d", cur_api_d))
 
-        # On ne laisse jamais une baisse écraser l'historique
-        effective_u = max(cur_raw_u, prev_raw_u)
-        effective_d = max(cur_raw_d, prev_raw_d)
+        # L'historique dépend UNIQUEMENT de l'API brute
+        effective_raw_u = max(cur_api_u, prev_raw_u)
+        effective_raw_d = max(cur_api_d, prev_raw_d)
 
-        # On ne sauvegarde que si ça monte
-        if cur_raw_u > prev_raw_u:
-            t["prev_raw_u"] = cur_raw_u
+        # On ne sauvegarde que les hausses API
+        if cur_api_u > prev_raw_u:
+            t["prev_raw_u"] = cur_api_u
 
-        if cur_raw_d > prev_raw_d:
-            t["prev_raw_d"] = cur_raw_d
+        if cur_api_d > prev_raw_d:
+            t["prev_raw_d"] = cur_api_d
 
-        r["raw_uploaded"] = cur_raw_u
-        r["raw_downloaded"] = cur_raw_d
+        # Debug / transparence interne API
+        r["raw_uploaded"] = cur_api_u
+        r["raw_downloaded"] = cur_api_d
+        r["floor_uploaded"] = effective_raw_u
+        r["floor_downloaded"] = effective_raw_d
 
-        r["uploaded"] = effective_u
-        r["downloaded"] = effective_d
-        r["delta"] = effective_u - effective_d
-        r["ratio"] = (effective_u / effective_d) if effective_d > 0 else float("inf")
+        # Le buffer manuel s'applique APRES, sans toucher au state
+        displayed_u = effective_raw_u + manual_u
+        displayed_d = effective_raw_d + manual_d
+
+        r["uploaded"] = displayed_u
+        r["downloaded"] = displayed_d
+        r["delta"] = displayed_u - displayed_d
+        r["ratio"] = (displayed_u / displayed_d) if displayed_d > 0 else float("inf")
 
     save_state(state)
+
+    # Tri final sur le vrai ratio affiché
+    rows.sort(key=lambda r: (r["ratio"] if r["ratio"] != float("inf") else 1e99))
     return rows

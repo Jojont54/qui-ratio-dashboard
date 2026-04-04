@@ -135,28 +135,39 @@ def compute_tracker_rows(payload: dict) -> list[dict]:
 
     rows = []
     for key, a in agg.items():
-        # buffers can be keyed either by logical key (recommended) or by domain fallback
+        # Buffer manuel fixe, séparé de l'API brute
         b = buffers.get(key, {"uploaded_add": 0, "downloaded_add": 0})
-
-        up2 = a["uploaded"] + b["uploaded_add"]
-        dl2 = a["downloaded"] + b["downloaded_add"]
-
-        if dl2 <= 0:
-            ratio = math.inf if up2 > 0 else 0.0
-        else:
-            ratio = up2 / dl2
+        manual_u = int(b.get("uploaded_add", 0))
+        manual_d = int(b.get("downloaded_add", 0))
 
         rows.append({
-            "tracker": key_to_display.get(key, key),  # pretty name if available
-            "uploaded": up2,
-            "downloaded": dl2,
-            "ratio": ratio,
-            "delta": up2 - dl2,
+            "tracker": key_to_display.get(key, key),
+            "_key": key,
+
+            # API brute uniquement
+            "uploaded": a["uploaded"],
+            "downloaded": a["downloaded"],
+
+            # Buffer manuel séparé
+            "manual_buffer_uploaded": manual_u,
+            "manual_buffer_downloaded": manual_d,
+
             "count": a["count"],
             "total_size": a["total_size"],
-            "_key": key,  # optional: internal key if you want JSON stable
+
+            # recalculés plus tard
+            "ratio": None,
+            "delta": None,
         })
 
-    rows.sort(key=lambda r: (r["ratio"] if r["ratio"] != math.inf else 1e99))
+    # Tri provisoire sur l'API brute + buffer, juste pour garder un ordre cohérent
+    def sort_ratio(r):
+        up = int(r["uploaded"]) + int(r.get("manual_buffer_uploaded", 0))
+        dl = int(r["downloaded"]) + int(r.get("manual_buffer_downloaded", 0))
+        if dl <= 0:
+            return 1e99 if up > 0 else 0
+        return up / dl
+
+    rows.sort(key=sort_ratio)
     return rows
 
