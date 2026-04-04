@@ -5,7 +5,7 @@ from flask import Flask, jsonify, Response, request, abort
 
 from .qui_client import QuiClient
 from .formatters import compute_tracker_rows, fmt_bytes
-from .state_store import apply_ledger
+from .state_store import apply_state_floor
 from .config import (
     PORT,
     HOMARR_AUTH_ENABLED,
@@ -70,7 +70,7 @@ def health():
 def api_ratios():
     payload = client.fetch_torrents_summary()
     rows = compute_tracker_rows(payload)
-    rows = apply_ledger(rows)
+    rows = apply_state_floor(rows)
     out = []
     for r in rows:
         rr = dict(r)
@@ -84,7 +84,7 @@ def api_ratios():
 def html():
     payload = client.fetch_torrents_summary()
     rows = compute_tracker_rows(payload)
-    rows = apply_ledger(rows)
+    rows = apply_state_floor(rows)
 
     def fmt_ratio(x):
         return "∞" if x == math.inf else f"{x:.2f}"
