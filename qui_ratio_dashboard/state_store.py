@@ -39,49 +39,44 @@ def save_state(state):
             json.dump(state, f, indent=2)
 
 def apply_ledger(rows):
-    """
-    rows: liste issue de compute_tracker_rows()
-    Modifie les uploaded/downloaded en ajoutant le buffer.
-    Détecte les resets automatiquement.
-    """
     state = load_state()
     trackers = state.setdefault("trackers", {})
 
     for r in rows:
         key = r["tracker"]
 
-        cur_u = r["uploaded"]
-        cur_d = r["downloaded"]
+        cur_raw_u = int(r["uploaded"])
+        cur_raw_d = int(r["downloaded"])
 
         t = trackers.setdefault(key, {
             "buf_u": 0,
             "buf_d": 0,
-            "prev_u": cur_u,
-            "prev_d": cur_d,
+            "prev_raw_u": cur_raw_u,
+            "prev_raw_d": cur_raw_d,
         })
 
-        # ---- RESET / BAISSE DETECTION ----
-        if cur_u < t["prev_u"]:
-            t["buf_u"] += (t["prev_u"] - cur_u)
+        prev_raw_u = int(t.get("prev_raw_u", cur_raw_u))
+        prev_raw_d = int(t.get("prev_raw_d", cur_raw_d))
 
-        if cur_d < t["prev_d"]:
-            t["buf_d"] += (t["prev_d"] - cur_d)
+        # Détection de baisse sur les RAW uniquement
+        if cur_raw_u < prev_raw_u:
+            t["buf_u"] = int(t.get("buf_u", 0)) + (prev_raw_u - cur_raw_u)
 
-        # ---- UPDATE PREVIOUS ----
-        t["prev_u"] = cur_u
-        t["prev_d"] = cur_d
+        if cur_raw_d < prev_raw_d:
+            t["buf_d"] = int(t.get("buf_d", 0)) + (prev_raw_d - cur_raw_d)
 
-        # ---- APPLY BUFFER ----
-        r["uploaded"] = cur_u + t["buf_u"]
-        r["downloaded"] = cur_d + t["buf_d"]
+        # Mise à jour du snapshot RAW uniquement
+        t["prev_raw_u"] = cur_raw_u
+        t["prev_raw_d"] = cur_raw_d
 
-        # recalcul delta et ratio
-        if r["downloaded"] > 0:
-            r["ratio"] = r["uploaded"] / r["downloaded"]
-        else:
-            r["ratio"] = float("inf")
+        # Valeurs affichées = RAW + BUFFER
+        displayed_u = cur_raw_u + int(t["buf_u"])
+        displayed_d = cur_raw_d + int(t["buf_d"])
 
-        r["delta"] = r["uploaded"] - r["downloaded"]
+        r["uploaded"] = displayed_u
+        r["downloaded"] = displayed_d
+        r["delta"] = displayed_u - displayed_d
+        r["ratio"] = (displayed_u / displayed_d) if displayed_d > 0 else float("inf")
 
     save_state(state)
     return rows
