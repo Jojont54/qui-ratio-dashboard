@@ -31,7 +31,8 @@ def parse_bytes(v) -> int:
 def load_buffers() -> dict:
     if not os.path.exists(BUFFERS_PATH):
         return {}
-    data = yaml.safe_load(open(BUFFERS_PATH, "r", encoding="utf-8")) or {}
+    with open(BUFFERS_PATH, "r", encoding="utf-8") as buffers_file:
+        data = yaml.safe_load(buffers_file) or {}
     buf = data.get("buffers", {}) or {}
     out = {}
     for tracker, v in buf.items():
@@ -60,23 +61,26 @@ def fmt_bytes(n: int) -> str:
 
 def load_tracker_map():
     if not os.path.exists(TRACKERS_PATH):
-        return {}, {}
-    data = yaml.safe_load(open(TRACKERS_PATH, "r", encoding="utf-8")) or {}
+        return {}, {}, {}
+    with open(TRACKERS_PATH, "r", encoding="utf-8") as trackers_file:
+        data = yaml.safe_load(trackers_file) or {}
     trackers = (data.get("trackers") or {})
 
     domain_to_key = {}
     key_to_display = {}
+    key_to_visibility = {}
 
     for key, cfg in trackers.items():
         key_to_display[key] = cfg.get("display", key)
+        key_to_visibility[key] = cfg.get("visible", True) is not False
         for d in (cfg.get("domains") or []):
             domain_to_key[d] = key
 
-    return domain_to_key, key_to_display
+    return domain_to_key, key_to_display, key_to_visibility
 
 def compute_tracker_rows(payload: dict) -> list[dict]:
     buffers = load_buffers()
-    domain_to_key, key_to_display = load_tracker_map()
+    domain_to_key, key_to_display, key_to_visibility = load_tracker_map()
 
     transfers = (((payload or {}).get("counts") or {}).get("trackerTransfers")) or {}
 
@@ -108,6 +112,7 @@ def compute_tracker_rows(payload: dict) -> list[dict]:
         rows.append({
             "tracker": key_to_display.get(key, key),
             "_key": key,
+            "web_visible": key_to_visibility.get(key, True),
 
             # API brute uniquement
             "uploaded": a["uploaded"],

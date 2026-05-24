@@ -1,6 +1,7 @@
 trackers:
   tracker_name:
     display: "Name_Displayed"
+    visible: true
     domains:
       - tracker.address.1
       - tracker.address.2

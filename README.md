@@ -27,5 +27,7 @@ Configuration variables:
 - `STATE_PATH`
 - `PORT`
 
-`trackers.yml` maps several tracker domains to one displayed tracker.
+`trackers.yml` maps several tracker domains to one displayed tracker. Set
+`visible: false` on a tracker to hide it from the web page while keeping its
+history and API data; if omitted, the tracker remains visible.
 `buffers.yml` adds an initial upload/download baseline.

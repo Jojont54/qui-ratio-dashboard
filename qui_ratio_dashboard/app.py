@@ -85,6 +85,7 @@ def html():
     payload = client.fetch_torrents_summary()
     rows = compute_tracker_rows(payload)
     rows = apply_state_ledger(rows)
+    rows = [r for r in rows if r.get("web_visible", True)]
 
     def fmt_ratio(x):
         return "∞" if x == math.inf else f"{x:.2f}"
