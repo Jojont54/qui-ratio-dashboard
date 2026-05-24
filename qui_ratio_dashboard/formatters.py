@@ -1,4 +1,3 @@
-import math
 import os
 import re
 import yaml
@@ -58,40 +57,6 @@ def fmt_bytes(n: int) -> str:
         i += 1
 
     return f"{sign}{v:.2f} {units[i]}"
-
-
-def compute_tracker_rows(payload: dict) -> list[dict]:
-    buffers = load_buffers()
-    transfers = (((payload or {}).get("counts") or {}).get("trackerTransfers")) or {}
-
-    rows = []
-    for tracker_domain, s in transfers.items():
-        up = int(s.get("uploaded", 0))
-        dl = int(s.get("downloaded", 0))
-        total_size = int(s.get("totalSize", 0))
-        count = int(s.get("count", 0))
-
-        b = buffers.get(tracker_domain, {"uploaded_add": 0, "downloaded_add": 0})
-        up2 = up + b["uploaded_add"]
-        dl2 = dl + b["downloaded_add"]
-
-        if dl2 <= 0:
-            ratio = math.inf if up2 > 0 else 0.0
-        else:
-            ratio = up2 / dl2
-
-        rows.append({
-            "tracker": tracker_domain,   # domaine uniquement (pas de passkey)
-            "uploaded": up2,
-            "downloaded": dl2,
-            "ratio": ratio,
-            "delta": up2 - dl2,
-            "count": count,
-            "total_size": total_size,
-        })
-
-    rows.sort(key=lambda r: (r["ratio"] if r["ratio"] != math.inf else 1e99))
-    return rows
 
 def load_tracker_map():
     if not os.path.exists(TRACKERS_PATH):

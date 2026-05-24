@@ -1,25 +1,31 @@
 ## qui-ratio-dashboard
 
-Tiny dashboard to display per-tracker ratios based on QUI aggregated stats, for local use or base on homarr cookie.
+Tiny dashboard displaying per-tracker ratios from QUI aggregated stats, for local
+use or embedding behind Homarr authentication.
 
-Variable : 
+The dashboard preserves totals from torrents removed from QUI. It records
+visible decreases in `/data/state.json` and carries them into later totals, so
+new upload and download activity remains visible immediately after a removal.
+Persist `/data` between container recreations.
 
-QUI_BASE_URL,
-QUI_INSTANCE_ID,
-QUI_API_KEY,
-HTTP_TIMEOUT,
-HOMARR_AUTH_ENABLED,
-HOMARR_BASE_URL,
-HOMARR_SESSION_ENDPOINT
+`buffers.yml` can seed historical upload/download already shown by a tracker
+site but unavailable in QUI. The result matches activity observed by QUI after
+that baseline; activity completed and deleted between two dashboard reads
+cannot be reconstructed without a direct tracker API.
 
-Port:
-PORT 
+Configuration variables:
 
-Path:
-/data
+- `QUI_BASE_URL`
+- `QUI_INSTANCE_ID`
+- `QUI_API_KEY`
+- `HTTP_TIMEOUT`
+- `HOMARR_AUTH_ENABLED`
+- `HOMARR_BASE_URL`
+- `HOMARR_SESSION_ENDPOINT`
+- `BUFFERS_PATH`
+- `TRACKERS_PATH`
+- `STATE_PATH`
+- `PORT`
 
-Tracker.yml to change the name and give link address
-
-Buffer.yml to add buffer upload / download 
-
-State.json to store deleted torrent statistics
+`trackers.yml` maps several tracker domains to one displayed tracker.
+`buffers.yml` adds an initial upload/download baseline.

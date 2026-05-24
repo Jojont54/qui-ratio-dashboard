@@ -19,4 +19,4 @@ ENV PORT=8787
 EXPOSE 8787
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["gunicorn", "-b", "0.0.0.0:8787", "qui_ratio_dashboard.app:app", "--workers", "2", "--threads", "4", "--timeout", "30"]
+CMD ["gunicorn", "-b", "0.0.0.0:8787", "qui_ratio_dashboard.app:app", "--workers", "1", "--threads", "4", "--timeout", "30"]
