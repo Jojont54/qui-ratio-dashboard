@@ -1,5 +1,6 @@
 import math
 import requests
+from threading import Event, Thread
 
 from flask import Flask, jsonify, Response, request, abort
 
@@ -12,11 +13,35 @@ from .config import (
     HOMARR_BASE_URL,
     HOMARR_SESSION_ENDPOINT,
     HTTP_TIMEOUT,
+    BACKGROUND_REFRESH_ENABLED,
+    REFRESH_INTERVAL_SECONDS,
 )
 
 
 app = Flask(__name__)
 client = QuiClient()
+_refresh_stop = Event()
+
+
+def refresh_rows():
+    payload = client.fetch_torrents_summary()
+    rows = compute_tracker_rows(payload)
+    return apply_state_ledger(rows)
+
+
+def refresh_periodically():
+    while not _refresh_stop.is_set():
+        try:
+            refresh_rows()
+        except Exception:
+            app.logger.exception("Background ratio refresh failed")
+        _refresh_stop.wait(REFRESH_INTERVAL_SECONDS)
+
+
+def start_background_refresh():
+    if not BACKGROUND_REFRESH_ENABLED:
+        return
+    Thread(target=refresh_periodically, name="ratio-refresh", daemon=True).start()
 
 
 def homarr_session_ok() -> bool:
@@ -68,9 +93,7 @@ def health():
 
 @app.get("/api/ratios")
 def api_ratios():
-    payload = client.fetch_torrents_summary()
-    rows = compute_tracker_rows(payload)
-    rows = apply_state_ledger(rows)
+    rows = refresh_rows()
     out = []
     for r in rows:
         rr = dict(r)
@@ -82,9 +105,7 @@ def api_ratios():
 
 @app.get("/")
 def html():
-    payload = client.fetch_torrents_summary()
-    rows = compute_tracker_rows(payload)
-    rows = apply_state_ledger(rows)
+    rows = refresh_rows()
     rows = [r for r in rows if r.get("web_visible", True)]
 
     def fmt_ratio(x):
@@ -136,6 +157,9 @@ def html():
 
     parts += ["</tbody></table></body></html>"]
     return Response("\n".join(parts), mimetype="text/html")
+
+
+start_background_refresh()
 
 
 if __name__ == "__main__":
