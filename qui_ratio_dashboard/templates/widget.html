@@ -6,6 +6,65 @@
   <title>Tracker Ratios</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='app-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <style>
+    :root {
+      --widget-bg: #242424;
+      --widget-panel: #2e2e2e;
+      --widget-border: #424242;
+      --widget-text: #e4e6eb;
+      --widget-muted: #9da5b4;
+      --widget-green: #33d17a;
+      --widget-yellow: #f6b73c;
+      --widget-red: #f35d6d;
+    }
+    * { box-sizing: border-box; }
+    body.widget-body {
+      margin: 0;
+      padding: 20px;
+      color: var(--widget-text);
+      background: var(--widget-bg);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+    .widget-title {
+      margin: 0 0 16px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .widget-table {
+      overflow: hidden;
+      background: var(--widget-panel);
+      border-radius: 12px;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .data-table th {
+      padding: 14px;
+      color: var(--widget-muted);
+      font-size: 12px;
+      font-weight: 550;
+      letter-spacing: .04em;
+      text-align: left;
+      text-transform: uppercase;
+    }
+    .data-table td {
+      padding: 14px;
+      border-top: 1px solid var(--widget-border);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .strong { font-weight: 600; }
+    .ratio { font-weight: 650; }
+    .ratio.good { color: var(--widget-green); }
+    .ratio.warn { color: var(--widget-yellow); }
+    .ratio.danger { color: var(--widget-red); }
+    .empty {
+      padding: 34px !important;
+      color: var(--widget-muted);
+      text-align: center;
+    }
+  </style>
 </head>
 <body class="widget-body">
   <h1 class="widget-title">Tracker Ratios</h1>
