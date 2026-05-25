@@ -70,11 +70,20 @@ def aggregate_tracker_rows(domain_rows, legacy_adjustments=None) -> list[dict]:
     for key, adjustment in legacy_adjustments.items():
         if key == "tracker_name":
             continue
+        key = domain_to_key.get(key, key)
         current = aggregate.setdefault(
             key, {"uploaded": 0, "downloaded": 0, "total_size": 0, "count": 0}
         )
         current["uploaded"] += int(adjustment.get("uploaded", 0))
         current["downloaded"] += int(adjustment.get("downloaded", 0))
+
+    for key, config in trackers.items():
+        if key == "tracker_name":
+            continue
+        if int(config.get("uploaded_add", 0)) or int(config.get("downloaded_add", 0)):
+            aggregate.setdefault(
+                key, {"uploaded": 0, "downloaded": 0, "total_size": 0, "count": 0}
+            )
 
     rows = []
     for key, totals in aggregate.items():

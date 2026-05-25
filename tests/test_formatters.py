@@ -85,6 +85,68 @@ class TrackerVisibilityTests(unittest.TestCase):
         self.assertEqual(rows[0]["uploaded"], 100)
         self.assertEqual(rows[0]["downloaded"], 50)
 
+    def test_legacy_domain_adjustment_is_folded_into_its_current_named_tracker(self):
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "10",
+                    "downloaded_add": "5",
+                }
+            }
+        )
+
+        rows = formatters.aggregate_tracker_rows(
+            [], {"shown.example": {"uploaded": 90, "downloaded": 45}}
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["tracker"], "Shown")
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
+
+    def test_removed_domain_history_is_folded_into_its_linked_named_tracker(self):
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "10",
+                    "downloaded_add": "5",
+                }
+            }
+        )
+
+        rows = formatters.aggregate_tracker_rows(
+            [
+                {
+                    "_key": "shown.example",
+                    "domain": "shown.example",
+                    "uploaded": 200,
+                    "downloaded": 60,
+                    "count": 130,
+                    "total_size": 1400,
+                },
+                {
+                    "_key": "shown.example",
+                    "domain": "shown.example",
+                    "uploaded": 90,
+                    "downloaded": 45,
+                    "count": 0,
+                    "total_size": 0,
+                },
+            ]
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["tracker"], "Shown")
+        self.assertEqual(rows[0]["uploaded"], 300)
+        self.assertEqual(rows[0]["downloaded"], 110)
+        self.assertEqual(rows[0]["count"], 130)
+
     def test_buffer_is_applied_after_domain_aggregation(self):
         database.update_trackers(
             {
@@ -112,6 +174,27 @@ class TrackerVisibilityTests(unittest.TestCase):
 
         self.assertEqual(rows[0]["uploaded"], 1100)
         self.assertEqual(rows[0]["downloaded"], 550)
+
+    def test_imported_buffer_is_visible_before_qui_reports_activity(self):
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "10 GiB",
+                    "downloaded_add": "2 GiB",
+                }
+            }
+        )
+
+        rows = formatters.aggregate_tracker_rows([])
+
+        shown = next(row for row in rows if row["_key"] == self.shown)
+        self.assertEqual(shown["uploaded"], 10 * 1024**3)
+        self.assertEqual(shown["downloaded"], 2 * 1024**3)
+        self.assertEqual(shown["ratio"], 5)
+        self.assertEqual(shown["count"], 0)
 
     def test_inherited_history_remains_visible_without_an_active_domain(self):
         rows = formatters.aggregate_tracker_rows(
