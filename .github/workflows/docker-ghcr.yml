@@ -2,7 +2,7 @@ name: Build & Push Docker image (GHCR)
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "develop"]
   workflow_dispatch:
 
 permissions:
@@ -39,5 +39,6 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ steps.repo.outputs.owner }}/qui-ratio-dashboard:latest
             ghcr.io/${{ steps.repo.outputs.owner }}/qui-ratio-dashboard:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/qui-ratio-dashboard:latest', steps.repo.outputs.owner) || '' }}
+            ${{ github.ref == 'refs/heads/develop' && format('ghcr.io/{0}/qui-ratio-dashboard:develop', steps.repo.outputs.owner) || '' }}
