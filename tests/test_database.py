@@ -496,14 +496,14 @@ class DatabaseTests(unittest.TestCase):
             "",
             "/api/auth/session",
             False,
-            "0.5",
+            "30",
             "25",
         )
 
         options = database.get_app_options()
         self.assertFalse(options["background_refresh_enabled"])
         self.assertEqual(options["refresh_interval_seconds"], 1800)
-        self.assertEqual(options["refresh_interval_hours"], 0.5)
+        self.assertEqual(options["refresh_interval_minutes"], 30)
         self.assertEqual(options["http_timeout_seconds"], 25)
 
     def test_invalid_stored_collection_options_fall_back_to_defaults(self):
@@ -520,6 +520,7 @@ class DatabaseTests(unittest.TestCase):
 
         options = database.get_app_options()
         self.assertEqual(options["refresh_interval_seconds"], 3600)
+        self.assertEqual(options["refresh_interval_minutes"], 60)
         self.assertEqual(options["http_timeout_seconds"], 10)
 
 

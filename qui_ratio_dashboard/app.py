@@ -333,7 +333,7 @@ def save_options():
         request.form.get("homarr_base_url", ""),
         request.form.get("homarr_session_endpoint", "/api/auth/session"),
         request.form.get("background_refresh_enabled") == "on",
-        request.form.get("refresh_interval_hours", "1"),
+        request.form.get("refresh_interval_minutes", "60"),
         request.form.get("http_timeout_seconds", "10"),
     )
     _refresh_wake.set()

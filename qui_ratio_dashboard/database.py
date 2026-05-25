@@ -453,6 +453,9 @@ def get_app_options():
             """
         ).fetchall()
     stored = {row["key"]: row["value"] for row in rows}
+    refresh_interval_seconds = max(
+        60, _stored_int(stored, "refresh_interval_seconds", 3600)
+    )
     return {
         "iframe_enabled": stored.get("iframe_enabled", "1") != "0",
         "homarr_auth_enabled": stored.get("homarr_auth_enabled", "0") == "1",
@@ -461,9 +464,8 @@ def get_app_options():
             "homarr_session_endpoint", "/api/auth/session"
         ),
         "background_refresh_enabled": stored.get("background_refresh_enabled", "1") != "0",
-        "refresh_interval_seconds": max(60, _stored_int(stored, "refresh_interval_seconds", 3600)),
-        "refresh_interval_hours": max(60, _stored_int(stored, "refresh_interval_seconds", 3600))
-        / 3600,
+        "refresh_interval_seconds": refresh_interval_seconds,
+        "refresh_interval_minutes": max(1, int(round(refresh_interval_seconds / 60))),
         "http_timeout_seconds": max(1.0, _stored_float(stored, "http_timeout_seconds", 10)),
     }
 
@@ -474,12 +476,12 @@ def update_app_options(
     homarr_base_url="",
     homarr_session_endpoint="/api/auth/session",
     background_refresh_enabled=True,
-    refresh_interval_hours=1,
+    refresh_interval_minutes=60,
     http_timeout_seconds=10,
 ):
     init_database()
     try:
-        refresh_interval_seconds = max(60, int(float(refresh_interval_hours) * 3600))
+        refresh_interval_seconds = max(60, int(float(refresh_interval_minutes) * 60))
     except (TypeError, ValueError):
         refresh_interval_seconds = 3600
     try:

@@ -64,8 +64,9 @@ the Homarr address and its session endpoint, then save. Once enabled, a valid
 Homarr session is required to access the application.
 
 The Options screen also controls background collection and API timeout. The
-automatic refresh is enabled by default and runs hourly; both its activation
-and interval can be changed without restarting the container.
+automatic refresh is enabled by default and runs every 60 minutes; both its
+activation and interval in minutes can be changed without restarting the
+container.
 
 Docker only exposes port `8787` and persists `/data`; no `.env` connection
 configuration is required anymore.
