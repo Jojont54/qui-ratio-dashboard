@@ -18,12 +18,10 @@ class TrackerVisibilityTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.previous_database_path = database.DATABASE_PATH
-        self.previous_trackers_path = database.TRACKERS_PATH
-        self.previous_buffers_path = database.BUFFERS_PATH
+        self.previous_legacy_dirs = database.LEGACY_CONFIG_DIRECTORIES
         self.previous_state_path = state_store.STATE_PATH
         database.DATABASE_PATH = os.path.join(self.temp_dir.name, "dashboard.db")
-        database.TRACKERS_PATH = os.path.join(self.temp_dir.name, "missing-trackers.yml")
-        database.BUFFERS_PATH = os.path.join(self.temp_dir.name, "missing-buffers.yml")
+        database.LEGACY_CONFIG_DIRECTORIES = (self.temp_dir.name,)
         state_store.STATE_PATH = os.path.join(self.temp_dir.name, "state.json")
         database.init_database()
         shown = database.create_tracker("Shown")
@@ -46,8 +44,7 @@ class TrackerVisibilityTests(unittest.TestCase):
 
     def tearDown(self):
         database.DATABASE_PATH = self.previous_database_path
-        database.TRACKERS_PATH = self.previous_trackers_path
-        database.BUFFERS_PATH = self.previous_buffers_path
+        database.LEGACY_CONFIG_DIRECTORIES = self.previous_legacy_dirs
         state_store.STATE_PATH = self.previous_state_path
         self.temp_dir.cleanup()
 
@@ -235,6 +232,92 @@ class TrackerVisibilityTests(unittest.TestCase):
         self.assertEqual(after_delete["ratio"], before_delete["ratio"])
         self.assertEqual(after_delete["count"], 1)
         self.assertEqual(after_delete["total_size"], 30 * gib)
+
+    def event_removal_scenario(self, event_uploaded="1", event_downloaded="1"):
+        gib = 1024**3
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "10 GiB",
+                    "downloaded_add": "5 GiB",
+                }
+            }
+        )
+
+        def refresh(uploaded, downloaded, count, total_size):
+            rows = formatters.compute_domain_rows(
+                {
+                    "counts": {
+                        "trackerTransfers": {
+                            "shown.example": {
+                                "uploaded": uploaded,
+                                "downloaded": downloaded,
+                                "count": count,
+                                "totalSize": total_size,
+                            }
+                        }
+                    }
+                }
+            )
+            mapping, settings = database.load_tracker_configuration(["shown.example"])
+            rows, legacy = state_store.apply_domain_ledger(rows, mapping, settings)
+            return formatters.aggregate_tracker_rows(rows, legacy)[0]
+
+        baseline = refresh(300 * gib, 100 * gib, 2, 80 * gib)
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "10 GiB",
+                    "downloaded_add": "5 GiB",
+                    "event_uploaded_multiplier": event_uploaded,
+                    "event_downloaded_multiplier": event_downloaded,
+                }
+            }
+        )
+        during_event = refresh(320 * gib, 110 * gib, 2, 80 * gib)
+        after_delete = refresh(125 * gib, 42 * gib, 1, 30 * gib)
+        continued = refresh(130 * gib, 45 * gib, 1, 30 * gib)
+        return baseline, during_event, after_delete, continued
+
+    def test_double_upload_credit_survives_a_torrent_removed_from_qui_summary(self):
+        gib = 1024**3
+
+        baseline, during_event, after_delete, continued = self.event_removal_scenario(
+            event_uploaded="2"
+        )
+
+        self.assertEqual(baseline["uploaded"], 310 * gib)
+        self.assertEqual(during_event["uploaded"], 350 * gib)
+        self.assertEqual(during_event["downloaded"], 115 * gib)
+        self.assertEqual(after_delete["uploaded"], during_event["uploaded"])
+        self.assertEqual(after_delete["downloaded"], during_event["downloaded"])
+        self.assertEqual(after_delete["ratio"], during_event["ratio"])
+        self.assertEqual(after_delete["count"], 1)
+        self.assertEqual(continued["uploaded"], 360 * gib)
+        self.assertEqual(continued["downloaded"], 118 * gib)
+
+    def test_freeleech_credit_survives_a_torrent_removed_from_qui_summary(self):
+        gib = 1024**3
+
+        baseline, during_event, after_delete, continued = self.event_removal_scenario(
+            event_downloaded="0"
+        )
+
+        self.assertEqual(baseline["downloaded"], 105 * gib)
+        self.assertEqual(during_event["uploaded"], 330 * gib)
+        self.assertEqual(during_event["downloaded"], 105 * gib)
+        self.assertEqual(after_delete["uploaded"], during_event["uploaded"])
+        self.assertEqual(after_delete["downloaded"], during_event["downloaded"])
+        self.assertEqual(after_delete["ratio"], during_event["ratio"])
+        self.assertEqual(after_delete["count"], 1)
+        self.assertEqual(continued["uploaded"], 335 * gib)
+        self.assertEqual(continued["downloaded"], 105 * gib)
 
 
 if __name__ == "__main__":

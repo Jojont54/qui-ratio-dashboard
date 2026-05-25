@@ -11,10 +11,11 @@ Persist `/data` between container recreations. A background refresh runs once
 at service startup and then once per hour by default, even when nobody opens
 the dashboard.
 
-`buffers.yml` can seed historical upload/download already shown by a tracker
-site but unavailable in QUI. The result matches activity observed by QUI after
-that baseline; activity completed and deleted between two dashboard reads
-cannot be reconstructed without a direct tracker API.
+Manual buffers entered from the Trackers screen can seed historical
+upload/download already shown by a tracker site but unavailable in QUI. The
+result matches activity observed by QUI after that baseline; activity
+completed and deleted between two dashboard reads cannot be reconstructed
+without a direct tracker API.
 
 ## Interface
 
@@ -28,11 +29,19 @@ cannot be reconstructed without a direct tracker API.
 
 The former `/app/` and `/app/trackers` paths remain available for compatibility.
 
-On the first start after this version is installed, `trackers.yml` and
-`buffers.yml` are imported into `/data/ratio_dashboard.db`. After that import,
-the SQLite database is the active configuration source and edits should be
-made through the interface. Keep the YAML files as an initial import or
-backup reference.
+The SQLite database at `/data/ratio_dashboard.db` is the active configuration
+source. Names, linked domains, buffers, clients and options are edited through
+the interface.
+
+When upgrading an older installation, the application detects existing
+`trackers.yml` and `buffers.yml` files in `/data` or `/data/old` on startup.
+If no tracker configuration is already present in SQLite, it imports the
+legacy names, linked domains, visibility and buffers once, then continues
+using only the database and removes the YAML files that were successfully
+converted. Existing database settings are never overwritten, and YAML files
+are not deleted when a database already contains tracker configuration.
+If an old Docker Compose file still mounts these YAML files read-only, the
+import succeeds but removal waits until that obsolete mount is removed.
 
 QUI servers are configured from the Clients torrent screen with the `+`
 button: enter the QUI address, port and API key, load its available qBittorrent

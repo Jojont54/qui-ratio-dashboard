@@ -8,11 +8,12 @@ from threading import RLock
 
 import yaml
 
-from .config import BUFFERS_PATH, DATABASE_PATH, TRACKERS_PATH
+from .config import DATABASE_PATH, LEGACY_CONFIG_DIRECTORIES
 from .units import fmt_bytes, parse_bytes
 
 
 _lock = RLock()
+_LEGACY_MIGRATION_KEY = "legacy_yaml_migration"
 
 
 def _now_utc():
@@ -87,16 +88,36 @@ def _database():
         connection.close()
 
 
-def _safe_load_yaml(path):
-    if not os.path.exists(path):
+def _slugify(value):
+    slug = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
+    return slug or "tracker"
+
+
+def _legacy_file(filename):
+    for directory in LEGACY_CONFIG_DIRECTORIES:
+        path = os.path.join(directory, filename)
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            return path
+    return None
+
+
+def _load_legacy_yaml(path):
+    if not path:
         return {}
     with open(path, "r", encoding="utf-8") as source_file:
         return yaml.safe_load(source_file) or {}
 
 
-def _slugify(value):
-    slug = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
-    return slug or "tracker"
+def _remove_migrated_yaml_files(paths):
+    cleanup_complete = True
+    for path in paths:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            os.remove(path)
+        except OSError:
+            cleanup_complete = False
+    return cleanup_complete
 
 
 def init_database():
@@ -154,14 +175,7 @@ def init_database():
         _add_column_if_missing(
             connection, "trackers", "event_downloaded_expires_at", "TEXT"
         )
-        imported = connection.execute(
-            "SELECT value FROM app_metadata WHERE key = 'legacy_yaml_imported'"
-        ).fetchone()
-        if imported is None:
-            _import_legacy_yaml(connection)
-            connection.execute(
-                "INSERT INTO app_metadata (key, value) VALUES ('legacy_yaml_imported', '1')"
-            )
+        _migrate_legacy_yaml_once(connection)
         _remove_example_placeholder(connection)
         _merge_duplicate_display_names(connection)
 
@@ -192,6 +206,44 @@ def _add_column_if_missing(connection, table, column, declaration):
     columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
     if column not in columns:
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+
+
+def _migrate_legacy_yaml_once(connection):
+    migration = connection.execute(
+        "SELECT value FROM app_metadata WHERE key = ?", (_LEGACY_MIGRATION_KEY,)
+    ).fetchone()
+    if migration is not None:
+        if migration["value"] == "imported_cleanup_pending":
+            paths = (_legacy_file("trackers.yml"), _legacy_file("buffers.yml"))
+            if _remove_migrated_yaml_files(paths):
+                connection.execute(
+                    "UPDATE app_metadata SET value = 'imported' WHERE key = ?",
+                    (_LEGACY_MIGRATION_KEY,),
+                )
+        return
+
+    trackers_path = _legacy_file("trackers.yml")
+    buffers_path = _legacy_file("buffers.yml")
+    if not trackers_path and not buffers_path:
+        return
+
+    existing_trackers = connection.execute("SELECT COUNT(*) FROM trackers").fetchone()[0]
+    if existing_trackers:
+        status = "skipped_existing_database"
+    else:
+        _import_legacy_yaml(connection, trackers_path, buffers_path)
+        status = "imported_cleanup_pending"
+    connection.execute(
+        "INSERT INTO app_metadata (key, value) VALUES (?, ?)",
+        (_LEGACY_MIGRATION_KEY, status),
+    )
+    if status == "imported_cleanup_pending":
+        connection.commit()
+        if _remove_migrated_yaml_files((trackers_path, buffers_path)):
+            connection.execute(
+                "UPDATE app_metadata SET value = 'imported' WHERE key = ?",
+                (_LEGACY_MIGRATION_KEY,),
+            )
 
 
 def _client_base_url(address, port):
@@ -389,35 +441,31 @@ def update_app_options(
             )
 
 
-def _upsert_tracker(connection, key, display_name=None, visible_dashboard=True, visible_widget=True):
-    connection.execute(
-        """
-        INSERT INTO trackers (key, display_name, visible_dashboard, visible_widget)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET
-            display_name = excluded.display_name,
-            visible_dashboard = excluded.visible_dashboard,
-            visible_widget = excluded.visible_widget
-        """,
-        (key, display_name or key, int(visible_dashboard), int(visible_widget)),
-    )
-
-
-def _import_legacy_yaml(connection):
-    tracker_data = (_safe_load_yaml(TRACKERS_PATH).get("trackers") or {})
+def _import_legacy_yaml(connection, trackers_path, buffers_path):
+    tracker_data = (_load_legacy_yaml(trackers_path).get("trackers") or {})
     for key, config in tracker_data.items():
         config = config or {}
-        if _is_example_placeholder(key, config):
+        if key == "tracker_name" and config.get("display", key) == "Name_Displayed":
             continue
         visible = config.get("visible", True) is not False
-        _upsert_tracker(connection, key, config.get("display", key), visible, visible)
+        connection.execute(
+            """
+            INSERT INTO trackers (key, display_name, visible_dashboard, visible_widget)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                display_name = excluded.display_name,
+                visible_dashboard = excluded.visible_dashboard,
+                visible_widget = excluded.visible_widget
+            """,
+            (key, config.get("display", key), int(visible), int(visible)),
+        )
         for domain in config.get("domains") or []:
             connection.execute(
                 "INSERT OR REPLACE INTO tracker_domains (domain, tracker_key) VALUES (?, ?)",
-                (domain, key),
+                (str(domain), key),
             )
 
-    buffer_data = (_safe_load_yaml(BUFFERS_PATH).get("buffers") or {})
+    buffer_data = (_load_legacy_yaml(buffers_path).get("buffers") or {})
     for key, config in buffer_data.items():
         config = config or {}
         if key == "tracker_name":
@@ -441,10 +489,6 @@ def _import_legacy_yaml(connection):
                 key,
             ),
         )
-
-
-def _is_example_placeholder(key, config):
-    return key == "tracker_name" and config.get("display", key) == "Name_Displayed"
 
 
 def _remove_example_placeholder(connection):

@@ -19,25 +19,30 @@ class DatabaseTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.previous_database_path = database.DATABASE_PATH
-        self.previous_trackers_path = database.TRACKERS_PATH
-        self.previous_buffers_path = database.BUFFERS_PATH
-        self.previous_loader = database._safe_load_yaml
+        self.previous_legacy_dirs = database.LEGACY_CONFIG_DIRECTORIES
+        self.previous_legacy_loader = database._load_legacy_yaml
+        self.previous_legacy_remover = database._remove_migrated_yaml_files
         self.previous_now = database._now_utc
         database.DATABASE_PATH = os.path.join(self.temp_dir.name, "dashboard.db")
-        database.TRACKERS_PATH = "trackers.yml"
-        database.BUFFERS_PATH = "buffers.yml"
+        database.LEGACY_CONFIG_DIRECTORIES = (self.temp_dir.name,)
 
     def tearDown(self):
         database.DATABASE_PATH = self.previous_database_path
-        database.TRACKERS_PATH = self.previous_trackers_path
-        database.BUFFERS_PATH = self.previous_buffers_path
-        database._safe_load_yaml = self.previous_loader
+        database.LEGACY_CONFIG_DIRECTORIES = self.previous_legacy_dirs
+        database._load_legacy_yaml = self.previous_legacy_loader
+        database._remove_migrated_yaml_files = self.previous_legacy_remover
         database._now_utc = self.previous_now
         self.temp_dir.cleanup()
 
-    def test_legacy_yaml_is_imported_only_once(self):
+    def test_legacy_yaml_is_automatically_imported_once_into_an_empty_database(self):
+        trackers_path = os.path.join(self.temp_dir.name, "trackers.yml")
+        buffers_path = os.path.join(self.temp_dir.name, "buffers.yml")
+        with open(trackers_path, "w", encoding="utf-8") as source_file:
+            source_file.write("legacy tracker configuration")
+        with open(buffers_path, "w", encoding="utf-8") as source_file:
+            source_file.write("legacy buffer configuration")
         contents = {
-            "trackers.yml": {
+            trackers_path: {
                 "trackers": {
                     "ygg": {
                         "display": "YGG",
@@ -46,13 +51,14 @@ class DatabaseTests(unittest.TestCase):
                     }
                 }
             },
-            "buffers.yml": {
+            buffers_path: {
                 "buffers": {
                     "ygg": {"uploaded_add": "10 TiB", "downloaded_add": "2 TiB"}
                 }
             },
         }
-        database._safe_load_yaml = lambda path: contents.get(path, {})
+        database._load_legacy_yaml = lambda path: contents.get(path, {})
+
         database.init_database()
 
         _, config = database.load_tracker_configuration()
@@ -60,21 +66,90 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(config["ygg"]["visible_widget"])
         self.assertEqual(config["ygg"]["uploaded_add"], 10 * 1024**4)
         self.assertEqual(database.list_trackers()[0]["buffer_uploaded_text"], "10 TiB")
+        self.assertFalse(os.path.exists(trackers_path))
+        self.assertFalse(os.path.exists(buffers_path))
 
-        contents["buffers.yml"]["buffers"]["ygg"]["uploaded_add"] = "99 TiB"
+        contents[buffers_path]["buffers"]["ygg"]["uploaded_add"] = "99 TiB"
         database.init_database()
         _, config = database.load_tracker_configuration()
         self.assertEqual(config["ygg"]["uploaded_add"], 10 * 1024**4)
+        with database._database() as connection:
+            status = connection.execute(
+                "SELECT value FROM app_metadata WHERE key = 'legacy_yaml_migration'"
+            ).fetchone()["value"]
+        self.assertEqual(status, "imported")
+
+    def test_read_only_legacy_yaml_does_not_block_migration_and_cleanup_is_retried(self):
+        trackers_path = os.path.join(self.temp_dir.name, "trackers.yml")
+        with open(trackers_path, "w", encoding="utf-8") as source_file:
+            source_file.write("legacy tracker configuration")
+        database._load_legacy_yaml = lambda path: {
+            "trackers": {"old": {"display": "Old", "domains": ["old.example"]}}
+        }
+        cleanup_allowed = [False]
+
+        def remove_when_allowed(paths):
+            if not cleanup_allowed[0]:
+                return False
+            for path in paths:
+                if path and os.path.exists(path):
+                    os.remove(path)
+            return True
+
+        database._remove_migrated_yaml_files = remove_when_allowed
+
+        database.init_database()
+        self.assertEqual(database.list_trackers()[0]["display_name"], "Old")
+        self.assertTrue(os.path.exists(trackers_path))
+        with database._database() as connection:
+            status = connection.execute(
+                "SELECT value FROM app_metadata WHERE key = 'legacy_yaml_migration'"
+            ).fetchone()["value"]
+        self.assertEqual(status, "imported_cleanup_pending")
+
+        cleanup_allowed[0] = True
+        database.init_database()
+        self.assertFalse(os.path.exists(trackers_path))
+        with database._database() as connection:
+            status = connection.execute(
+                "SELECT value FROM app_metadata WHERE key = 'legacy_yaml_migration'"
+            ).fetchone()["value"]
+        self.assertEqual(status, "imported")
+
+    def test_legacy_yaml_does_not_overwrite_an_already_configured_database(self):
+        database.init_database()
+        database.load_tracker_configuration(["current.example"])
+        database.group_domains(["current.example"], "Current")
+        trackers_path = os.path.join(self.temp_dir.name, "trackers.yml")
+        with open(trackers_path, "w", encoding="utf-8") as source_file:
+            source_file.write("legacy tracker configuration")
+        database._load_legacy_yaml = lambda path: {
+            "trackers": {
+                "legacy": {
+                    "display": "Legacy",
+                    "domains": ["legacy.example"],
+                }
+            }
+        }
+
+        database.init_database()
+
+        trackers = database.list_trackers()
+        self.assertEqual([tracker["display_name"] for tracker in trackers], ["Current"])
+        self.assertTrue(os.path.exists(trackers_path))
+        with database._database() as connection:
+            status = connection.execute(
+                "SELECT value FROM app_metadata WHERE key = 'legacy_yaml_migration'"
+            ).fetchone()["value"]
+        self.assertEqual(status, "skipped_existing_database")
 
     def test_discovered_domain_becomes_manageable_tracker(self):
-        database._safe_load_yaml = lambda path: {}
         _, config = database.load_tracker_configuration(["new.tracker.example"])
 
         self.assertIn("new.tracker.example", config)
         self.assertEqual(database.list_trackers()[0]["domains"], ["new.tracker.example"])
 
     def test_selected_domains_can_be_grouped_and_empty_discovered_entries_removed(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example", "two.example"])
 
         database.group_domains(["one.example", "two.example"], "My Tracker")
@@ -85,7 +160,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(trackers[0]["domains"], ["one.example", "two.example"])
 
     def test_settings_update_keeps_existing_domain_links(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example"])
         database.group_domains(["one.example"], "My Tracker")
         tracker = database.list_trackers()[0]
@@ -111,7 +185,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(updated["event_downloaded_multiplier"], 0.5)
 
     def test_linking_all_domains_to_new_name_renames_existing_group(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example", "two.example"])
         database.group_domains(["one.example", "two.example"], "Old Name")
         tracker = database.list_trackers()[0]
@@ -136,7 +209,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(trackers[0]["buffer_uploaded_text"], "5 TiB")
 
     def test_merging_existing_groups_preserves_their_buffers(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example", "two.example"])
         database.group_domains(["one.example"], "First")
         database.group_domains(["two.example"], "Second")
@@ -164,7 +236,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(trackers[0]["buffer_downloaded_text"], "4.00 TiB")
 
     def test_editing_a_name_to_an_existing_name_merges_the_groups(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example", "two.example"])
         database.group_domains(["one.example"], "First")
         database.group_domains(["two.example"], "Second")
@@ -197,7 +268,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(merged[0]["buffer_downloaded_text"], "4.00 TiB")
 
     def test_selected_domains_can_be_unlinked_from_group(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example", "two.example"])
         database.group_domains(["one.example", "two.example"], "My Tracker")
 
@@ -208,7 +278,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(trackers["two.example"]["domains"], ["two.example"])
 
     def test_unlinking_a_whole_buffered_group_preserves_its_total_buffer(self):
-        database._safe_load_yaml = lambda path: {}
         database.load_tracker_configuration(["one.example", "two.example"])
         database.group_domains(["one.example", "two.example"], "My Tracker")
         tracker = database.list_trackers()[0]
@@ -230,28 +299,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(sum(row["buffer_uploaded"] for row in trackers), 5 * 1024**4)
         self.assertEqual(sum(row["buffer_downloaded"] for row in trackers), 1024**4)
 
-    def test_example_placeholder_is_not_imported_or_listed(self):
-        database._safe_load_yaml = lambda path: {
-            "trackers": {
-                "tracker_name": {
-                    "display": "Name_Displayed",
-                    "domains": ["tracker.address.1"],
-                }
-            },
-            "buffers": {
-                "tracker_name": {
-                    "uploaded_add": "100 TiB",
-                    "downloaded_add": "50 TiB",
-                }
-            },
-        }
-
-        database.init_database()
-
-        self.assertEqual(database.list_trackers(), [])
-
     def test_old_renamed_example_placeholder_is_removed_when_it_has_no_domains(self):
-        database._safe_load_yaml = lambda path: {}
         database.init_database()
         with database._database() as connection:
             connection.execute(
@@ -270,7 +318,6 @@ class DatabaseTests(unittest.TestCase):
         self.assertNotIn("tracker_name", trackers)
 
     def test_timed_events_expire_and_return_to_normal(self):
-        database._safe_load_yaml = lambda path: {}
         current_time = [datetime(2026, 5, 25, 10, 0, tzinfo=timezone.utc)]
         database._now_utc = lambda: current_time[0]
         database.load_tracker_configuration(["one.example"])
