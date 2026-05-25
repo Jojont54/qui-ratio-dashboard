@@ -6,18 +6,7 @@ import unittest
 from qui_ratio_dashboard import state_store
 
 
-def row(uploaded, downloaded, manual_uploaded=0, manual_downloaded=0):
-    return {
-        "_key": "tracker",
-        "tracker": "Tracker",
-        "uploaded": uploaded,
-        "downloaded": downloaded,
-        "manual_buffer_uploaded": manual_uploaded,
-        "manual_buffer_downloaded": manual_downloaded,
-    }
-
-
-class StateLedgerTests(unittest.TestCase):
+class DomainLedgerTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.previous_path = state_store.STATE_PATH
@@ -27,41 +16,102 @@ class StateLedgerTests(unittest.TestCase):
         state_store.STATE_PATH = self.previous_path
         self.temp_dir.cleanup()
 
-    def apply(self, *args, **kwargs):
-        return state_store.apply_state_ledger([row(*args, **kwargs)])[0]
+    def apply(self, rows, mapping=None):
+        return state_store.apply_domain_ledger(rows, mapping or {})
 
-    def test_new_activity_is_visible_after_a_torrent_removal(self):
-        self.assertEqual(self.apply(100, 50)["uploaded"], 100)
+    def domain_row(self, domain, uploaded, downloaded):
+        return {
+            "_key": domain,
+            "domain": domain,
+            "tracker": domain,
+            "uploaded": uploaded,
+            "downloaded": downloaded,
+            "count": 1,
+            "total_size": 1,
+        }
 
-        after_removal = self.apply(20, 10)
-        self.assertEqual(after_removal["uploaded"], 100)
-        self.assertEqual(after_removal["downloaded"], 50)
-        self.assertEqual(after_removal["carried_uploaded"], 80)
+    def test_history_follows_domain_when_it_is_regrouped(self):
+        rows, _ = self.apply([self.domain_row("tracker.example", 100, 50)], {"tracker.example": "old"})
+        self.assertEqual(rows[0]["uploaded"], 100)
 
-        after_new_transfer = self.apply(30, 15)
-        self.assertEqual(after_new_transfer["uploaded"], 110)
-        self.assertEqual(after_new_transfer["downloaded"], 55)
-        self.assertEqual(after_new_transfer["ratio"], 2.0)
+        rows, _ = self.apply([self.domain_row("tracker.example", 110, 55)], {"tracker.example": "new"})
+        self.assertEqual(rows[0]["uploaded"], 110)
+        self.assertEqual(rows[0]["downloaded"], 55)
 
-    def test_manual_buffer_is_fixed_and_not_recorded_as_history(self):
-        initial = self.apply(100, 50, manual_uploaded=1000, manual_downloaded=500)
-        self.assertEqual(initial["uploaded"], 1100)
+    def test_removed_domain_is_kept_in_history(self):
+        self.apply([self.domain_row("tracker.example", 100, 50)])
+        rows, _ = self.apply([])
 
-        after_removal = self.apply(20, 10, manual_uploaded=1000, manual_downloaded=500)
-        self.assertEqual(after_removal["tracked_uploaded"], 100)
-        self.assertEqual(after_removal["uploaded"], 1100)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
 
-    def test_floor_state_is_migrated_without_changing_current_display(self):
+        rows, _ = self.apply([self.domain_row("tracker.example", 20, 10)])
+        self.assertEqual(rows[0]["uploaded"], 120)
+        self.assertEqual(rows[0]["downloaded"], 60)
+
+    def test_previous_tracker_state_becomes_a_legacy_adjustment(self):
         with open(state_store.STATE_PATH, "w", encoding="utf-8") as state_file:
-            json.dump({"trackers": {"tracker": {"prev_raw_u": 100, "prev_raw_d": 50}}}, state_file)
+            json.dump(
+                {"version": 2, "trackers": {"ygg": {"prev_raw_u": 100, "prev_raw_d": 50}}},
+                state_file,
+            )
 
-        migrated = self.apply(20, 10)
-        self.assertEqual(migrated["uploaded"], 100)
-        self.assertEqual(migrated["downloaded"], 50)
+        rows, adjustments = self.apply(
+            [self.domain_row("tracker.ygg.example", 20, 10)],
+            {"tracker.ygg.example": "ygg"},
+        )
 
-        advanced = self.apply(30, 15)
-        self.assertEqual(advanced["uploaded"], 110)
-        self.assertEqual(advanced["downloaded"], 55)
+        self.assertEqual(rows[0]["uploaded"], 20)
+        self.assertEqual(adjustments["ygg"], {"uploaded": 80, "downloaded": 40})
+
+    def test_events_only_apply_to_new_transfer_deltas(self):
+        settings = {
+            "ygg": {
+                "event_uploaded_multiplier": 2,
+                "event_downloaded_multiplier": 0.5,
+            }
+        }
+        rows, _ = state_store.apply_domain_ledger(
+            [self.domain_row("tracker.ygg.example", 100, 50)],
+            {"tracker.ygg.example": "ygg"},
+            settings,
+        )
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
+
+        rows, _ = state_store.apply_domain_ledger(
+            [self.domain_row("tracker.ygg.example", 110, 60)],
+            {"tracker.ygg.example": "ygg"},
+            settings,
+        )
+        self.assertEqual(rows[0]["uploaded"], 120)
+        self.assertEqual(rows[0]["downloaded"], 55)
+
+        rows, _ = state_store.apply_domain_ledger(
+            [self.domain_row("tracker.ygg.example", 120, 70)],
+            {"tracker.ygg.example": "ygg"},
+            {"ygg": {"event_uploaded_multiplier": 1, "event_downloaded_multiplier": 0}},
+        )
+        self.assertEqual(rows[0]["uploaded"], 130)
+        self.assertEqual(rows[0]["downloaded"], 55)
+
+    def test_each_client_keeps_its_own_history_for_the_same_domain(self):
+        first = self.domain_row("tracker.example", 100, 30)
+        first["ledger_key"] = "client:1:tracker.example"
+        second = self.domain_row("tracker.example", 80, 20)
+        second["ledger_key"] = "client:2:tracker.example"
+        rows, _ = self.apply([first, second])
+        self.assertEqual(sum(row["uploaded"] for row in rows), 180)
+
+        first = self.domain_row("tracker.example", 10, 2)
+        first["ledger_key"] = "client:1:tracker.example"
+        second = self.domain_row("tracker.example", 100, 25)
+        second["ledger_key"] = "client:2:tracker.example"
+        rows, _ = self.apply([first, second])
+
+        self.assertEqual(sum(row["uploaded"] for row in rows), 200)
+        self.assertEqual(sum(row["downloaded"] for row in rows), 55)
 
 
 if __name__ == "__main__":

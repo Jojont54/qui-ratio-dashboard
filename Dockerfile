@@ -15,7 +15,6 @@ COPY trackers.yml.example /app/trackers.yml.example
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-ENV PORT=8787
 EXPOSE 8787
 
 ENTRYPOINT ["/app/entrypoint.sh"]

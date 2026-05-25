@@ -3,18 +3,6 @@ services:
     build: .
     ports:
       - "8787:8787"
-    environment:
-      QUI_BASE_URL: "http://${IP}:7476"
-      HOMARR_BASE_URL: "http://${IP}:7575"
-      QUI_INSTANCE_ID: "1"
-      QUI_API_KEY: "${QUI_API_KEY}"
-      BACKGROUND_REFRESH_ENABLED: "1"
-      REFRESH_INTERVAL_SECONDS: "3600"
-      BUFFERS_PATH: "/data/buffers.yml"
-      TRACKERS_PATH: "/data/trackers.yml"
-      STATE_PATH: "/data/state.json"
     volumes:
       - ./data:/data
-      - ./buffers.yml:/data/buffers.yml:ro
-      - ./trackers.yml:/data/trackers.yml:ro
 

@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+{% set section = "options" %}
+{% block title %}Options - Ratio Dashboard{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>Options</h1>
+    <p>Reglages generaux de l'application.</p>
+  </div>
+</header>
+
+<section class="panel options-panel">
+  <div class="panel-heading">
+    <h2>Integration</h2>
+  </div>
+  <form class="options-form" method="post" action="{{ url_for('save_options') }}">
+    <div class="option-row">
+      <div>
+        <strong>iFrame Homarr</strong>
+        <p>Autorise l'affichage compact via <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
+      </div>
+      <label class="switch" aria-label="Activer iFrame">
+        <input type="checkbox" name="iframe_enabled" {% if options.iframe_enabled %}checked{% endif %}>
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+    <div class="option-state">
+      Etat actuel :
+      <strong class="{% if options.iframe_enabled %}enabled{% else %}disabled{% endif %}">
+        {% if options.iframe_enabled %}Activee{% else %}Desactivee{% endif %}
+      </strong>
+    </div>
+    <div class="option-row homarr-auth-row">
+      <div>
+        <strong>Authentification Homarr</strong>
+        <p>Verifie la session Homarr avant d'autoriser l'acces a l'application.</p>
+      </div>
+      <label class="switch" aria-label="Activer l'authentification Homarr">
+        <input type="checkbox" name="homarr_auth_enabled" {% if options.homarr_auth_enabled %}checked{% endif %}>
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+    <div class="homarr-settings">
+      <label>
+        Adresse Homarr
+        <input name="homarr_base_url" value="{{ options.homarr_base_url }}" placeholder="https://homarr.exemple.fr">
+      </label>
+      <label>
+        Chemin de session
+        <input name="homarr_session_endpoint" value="{{ options.homarr_session_endpoint }}" placeholder="/api/auth/session">
+      </label>
+      <p class="option-help">Activez uniquement apres avoir verifie l'adresse Homarr : une session Homarr valide sera requise pour revenir dans l'application.</p>
+    </div>
+    <div class="options-divider"></div>
+    <div class="panel-heading option-heading">
+      <h2>Collecte</h2>
+    </div>
+    <div class="option-row">
+      <div>
+        <strong>Rafraichissement automatique</strong>
+        <p>Collecte les statistiques en arriere-plan, meme lorsque le dashboard n'est pas ouvert.</p>
+      </div>
+      <label class="switch" aria-label="Activer le rafraichissement automatique">
+        <input type="checkbox" name="background_refresh_enabled" {% if options.background_refresh_enabled %}checked{% endif %}>
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+    <div class="runtime-settings">
+      <label>
+        Frequence de rafraichissement (heures)
+        <input type="number" name="refresh_interval_hours" min="0.0167" step="0.25" value="{{ options.refresh_interval_hours }}" required>
+      </label>
+      <label>
+        Delai maximum des API (secondes)
+        <input type="number" name="http_timeout_seconds" min="1" step="1" value="{{ options.http_timeout_seconds }}" required>
+      </label>
+      <p class="option-help">La frequence minimale acceptee est d'une minute. Le changement est applique des la sauvegarde.</p>
+    </div>
+    <div class="global-save">
+      <button class="button" type="submit">Sauver les options</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

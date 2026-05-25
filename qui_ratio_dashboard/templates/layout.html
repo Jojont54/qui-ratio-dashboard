@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Ratio Dashboard{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='app-icon.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="app-body">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-icon" src="{{ url_for('static', filename='app-icon.png') }}" alt="">
+      <span>Ratio Dashboard</span>
+    </div>
+    <nav class="navigation">
+      <a href="{{ url_for('dashboard') }}" class="{% if section == 'dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="{{ url_for('trackers') }}" class="{% if section == 'trackers' %}active{% endif %}">Trackers</a>
+      <a href="{{ url_for('torrent_clients') }}" class="{% if section == 'clients' %}active{% endif %}">Clients torrent</a>
+      <a href="{{ url_for('options') }}" class="{% if section == 'options' %}active{% endif %}">Options</a>
+    </nav>
+    <div class="sidebar-note">Source active<br><strong>QUI</strong></div>
+  </aside>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

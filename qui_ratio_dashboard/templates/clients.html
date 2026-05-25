@@ -1,0 +1,183 @@
+{% extends "layout.html" %}
+{% set section = "clients" %}
+{% block title %}Clients torrent - Ratio Dashboard{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>Clients torrent</h1>
+    <p>Connectez une ou plusieurs instances QUI pour reunir leurs statistiques.</p>
+  </div>
+  <button class="button add-client-button" type="button" onclick="document.getElementById('add-client-dialog').showModal()" aria-label="Ajouter un client">+</button>
+</header>
+
+<section class="panel">
+  <div class="panel-heading">
+    <h2>Connexions QUI</h2>
+    <span class="badge">{{ clients|length }} client{% if clients|length != 1 %}s{% endif %}</span>
+  </div>
+  <div class="client-grid">
+    {% for client in clients %}
+    <article class="client-card">
+      <div class="client-card-heading">
+        <div>
+          <h3>{{ client.name }}</h3>
+          <span class="client-type">{{ client.client_type }}</span>
+        </div>
+        <div class="client-actions">
+          <button class="edit-button" type="button" onclick="document.getElementById('edit-client-dialog-{{ client.id }}').showModal()" title="Modifier le client" aria-label="Modifier {{ client.name }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 20H5a1 1 0 0 1-1-1v-7M16.5 3.5a2.12 2.12 0 0 1 3 3L10 16l-4 1 1-4z"/>
+            </svg>
+          </button>
+          <form method="post" action="{{ url_for('delete_client', client_id=client.id) }}" onsubmit="return confirm('Supprimer ce client ?');">
+            <button class="delete-button" type="submit" title="Supprimer le client" aria-label="Supprimer {{ client.name }}">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18M9 6V4h6v2m-9 0 1 15h10l1-15M10 10v7m4-7v7"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+      <dl class="client-details">
+        <dt>Adresse</dt>
+        <dd>{{ client.base_url }}</dd>
+        <dt>Instance</dt>
+        <dd>#{{ client.instance_id }}</dd>
+        <dt>Cle API</dt>
+        <dd>{{ client.api_key_hint }}</dd>
+      </dl>
+    </article>
+    <dialog class="client-dialog" id="edit-client-dialog-{{ client.id }}">
+      <form class="dialog-form client-connect-form" method="post" action="{{ url_for('update_client', client_id=client.id) }}" data-client-id="{{ client.id }}">
+        <div class="dialog-heading">
+          <div>
+            <h2>Modifier le client</h2>
+            <p>Connexion QUI</p>
+          </div>
+          <button class="close-button" type="button" data-close-dialog aria-label="Fermer">x</button>
+        </div>
+        <label>
+          Nom
+          <input name="name" value="{{ client.name }}" required>
+        </label>
+        <label>
+          Adresse
+          <input name="address" value="{{ client.address }}" required>
+        </label>
+        <label>
+          Port
+          <input type="number" min="1" max="65535" name="port" value="{{ client.port }}" placeholder="7476">
+        </label>
+        <label>
+          Cle API
+          <input type="password" name="api_key" placeholder="Laisser vide pour conserver la cle" autocomplete="off">
+        </label>
+        <div class="instance-discovery">
+          <button class="button secondary discover-instances" type="button">Charger les instances</button>
+          <span class="instance-status">Instance actuelle : #{{ client.instance_id }}</span>
+        </div>
+        <label>
+          Instance qBittorrent dans QUI
+          <select name="instance_id" class="instance-id" required>
+            <option value="{{ client.instance_id }}" selected>Instance actuelle (#{{ client.instance_id }})</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" data-close-dialog>Annuler</button>
+          <button class="button" type="submit">Sauver</button>
+        </div>
+      </form>
+    </dialog>
+    {% else %}
+    <div class="empty client-empty">Aucun client configure. Ajoutez une instance QUI pour commencer.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<dialog class="client-dialog" id="add-client-dialog">
+  <form class="dialog-form client-connect-form" method="post" action="{{ url_for('add_client') }}">
+    <div class="dialog-heading">
+      <div>
+        <h2>Ajouter un client</h2>
+        <p>Connexion QUI</p>
+      </div>
+      <button class="close-button" type="button" data-close-dialog aria-label="Fermer">x</button>
+    </div>
+    <label>
+      Nom
+      <input name="name" value="QUI" required>
+    </label>
+    <label>
+      Adresse
+      <input name="address" placeholder="http://192.168.1.10" required>
+    </label>
+    <label>
+      Port
+      <input type="number" min="1" max="65535" name="port" placeholder="7476">
+    </label>
+    <label>
+      Cle API
+      <input type="password" name="api_key" required autocomplete="off">
+    </label>
+    <div class="instance-discovery">
+      <button class="button secondary discover-instances" type="button">Charger les instances</button>
+      <span class="instance-status">Connectez QUI pour choisir qBittorrent.</span>
+    </div>
+    <label>
+      Instance qBittorrent dans QUI
+      <select name="instance_id" class="instance-id" required disabled>
+        <option value="">Chargez les instances disponibles</option>
+      </select>
+    </label>
+    <div class="dialog-actions">
+      <button class="button secondary" type="button" data-close-dialog>Annuler</button>
+      <button class="button" type="submit">Ajouter</button>
+    </div>
+  </form>
+</dialog>
+<script>
+  (() => {
+    document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+      button.addEventListener("click", () => button.closest("dialog").close());
+    });
+
+    document.querySelectorAll(".client-connect-form").forEach((form) => {
+      const button = form.querySelector(".discover-instances");
+      const status = form.querySelector(".instance-status");
+      const select = form.querySelector(".instance-id");
+      button.addEventListener("click", async () => {
+        const data = new FormData();
+        data.append("address", form.elements.address.value);
+        data.append("port", form.elements.port.value);
+        data.append("api_key", form.elements.api_key.value);
+        data.append("client_id", form.dataset.clientId || "");
+        status.textContent = "Recherche des instances...";
+        try {
+          const response = await fetch("{{ url_for('discover_qui_instances') }}", {
+            method: "POST",
+            body: data,
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || "Connexion impossible.");
+          }
+          select.innerHTML = "";
+          payload.instances.forEach((instance) => {
+            const option = document.createElement("option");
+            option.value = instance.id;
+            option.textContent = instance.name + " (#" + instance.id + ")";
+            select.appendChild(option);
+          });
+          if (payload.instances.length === 0) {
+            throw new Error("Aucune instance qBittorrent trouvee dans QUI.");
+          }
+          select.disabled = false;
+          status.textContent = payload.instances.length + " instance(s) disponible(s).";
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}

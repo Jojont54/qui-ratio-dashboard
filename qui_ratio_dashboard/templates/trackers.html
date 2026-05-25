@@ -1,0 +1,191 @@
+{% extends "layout.html" %}
+{% set section = "trackers" %}
+{% block title %}Trackers - Ratio Dashboard{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>Trackers</h1>
+    <p>Selectionnez des adresses, reliez-les a un nom et reglez son affichage au meme endroit.</p>
+  </div>
+</header>
+
+<section class="panel unified-trackers">
+  <form id="group-form" method="post" action="{{ url_for('group_selected_domains') }}">
+    <div class="link-toolbar">
+      <div class="link-hint">
+        <strong>Lier des adresses</strong>
+        <span>Cochez des lignes, puis utilisez Maj + clic pour une plage.</span>
+      </div>
+      <label class="target-field">
+        Nom destination
+        <input name="display_name" list="tracker-names" placeholder="Exemple : YGG" required>
+      </label>
+      <datalist id="tracker-names">
+        {% for tracker in trackers %}
+        <option value="{{ tracker.display_name }}">
+        {% endfor %}
+      </datalist>
+      <button class="icon-button" type="submit" title="Lier la selection" aria-label="Lier la selection">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.07.07l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.07-.07l-3 3a5 5 0 1 0 7.07 7.07l1.71-1.71M8 12h8"/>
+        </svg>
+      </button>
+      <button class="icon-button secondary-icon" type="submit" formaction="{{ url_for('unlink_selected_domains') }}" formnovalidate title="Delier la selection" aria-label="Delier la selection">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.5 8.5 6.93 6.93a5 5 0 0 0-7.07 7.07l3 3a5 5 0 0 0 6.72.32M15.5 15.5l1.57 1.57a5 5 0 0 0 7.07-7.07l-3-3a5 5 0 0 0-6.72-.32M3 3l18 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{{ url_for('save_tracker_settings') }}">
+    <div class="settings-list">
+      {% for tracker in trackers %}
+      {% set group_id = "tracker-" ~ loop.index0 %}
+      <details class="tracker-settings">
+        <summary>
+          <input class="group-checkbox" type="checkbox" data-group="{{ group_id }}" aria-label="Selectionner toutes les adresses de {{ tracker.display_name }}">
+          <span class="settings-title">{{ tracker.display_name }}</span>
+          <span class="settings-count">{{ tracker.domains|length }} adresse{% if tracker.domains|length > 1 %}s{% endif %}</span>
+        </summary>
+        <div class="settings-content">
+          <div class="settings-fields">
+            <label class="settings-name">
+              Nom
+              <input name="display__{{ tracker.key }}" value="{{ tracker.display_name }}">
+            </label>
+            <label class="upload-buffer">
+              Buffer upload
+              <input name="upload__{{ tracker.key }}" value="{{ tracker.buffer_uploaded_text }}">
+            </label>
+            <label class="upload-event">
+              Evenement upload
+              <select name="event_upload__{{ tracker.key }}">
+                <option value="1" {% if tracker.event_uploaded_multiplier == 1 %}selected{% endif %}>Normal (x1)</option>
+                <option value="2" {% if tracker.event_uploaded_multiplier == 2 %}selected{% endif %}>Double upload (x2)</option>
+                <option value="3" {% if tracker.event_uploaded_multiplier == 3 %}selected{% endif %}>Triple upload (x3)</option>
+              </select>
+            </label>
+            <label class="upload-end">
+              Fin evenement (h)
+              <input type="number" min="0.1" step="0.1" name="event_upload_hours__{{ tracker.key }}" value="{{ tracker.event_uploaded_hours_remaining }}" placeholder="Sans fin">
+              <input type="hidden" name="original_event_upload__{{ tracker.key }}" value="{{ tracker.event_uploaded_multiplier }}">
+              <input type="hidden" name="original_event_upload_hours__{{ tracker.key }}" value="{{ tracker.event_uploaded_hours_remaining }}">
+              <input type="hidden" name="original_event_upload_expires__{{ tracker.key }}" value="{{ tracker.event_uploaded_expires_at }}">
+            </label>
+            <label class="download-buffer">
+              Buffer download
+              <input name="download__{{ tracker.key }}" value="{{ tracker.buffer_downloaded_text }}">
+            </label>
+            <label class="download-event">
+              Evenement download
+              <select name="event_download__{{ tracker.key }}">
+                <option value="1" {% if tracker.event_downloaded_multiplier == 1 %}selected{% endif %}>Normal (x1)</option>
+                <option value="0.5" {% if tracker.event_downloaded_multiplier == 0.5 %}selected{% endif %}>Silverleech (x0.5)</option>
+                <option value="0" {% if tracker.event_downloaded_multiplier == 0 %}selected{% endif %}>Freeleech (x0)</option>
+              </select>
+            </label>
+            <label class="download-end">
+              Fin evenement (h)
+              <input type="number" min="0.1" step="0.1" name="event_download_hours__{{ tracker.key }}" value="{{ tracker.event_downloaded_hours_remaining }}" placeholder="Sans fin">
+              <input type="hidden" name="original_event_download__{{ tracker.key }}" value="{{ tracker.event_downloaded_multiplier }}">
+              <input type="hidden" name="original_event_download_hours__{{ tracker.key }}" value="{{ tracker.event_downloaded_hours_remaining }}">
+              <input type="hidden" name="original_event_download_expires__{{ tracker.key }}" value="{{ tracker.event_downloaded_expires_at }}">
+            </label>
+            <label class="checkbox compact dashboard-visibility">
+              <input type="checkbox" name="dashboard__{{ tracker.key }}" {% if tracker.visible_dashboard %}checked{% endif %}>
+              Dashboard
+            </label>
+            <label class="checkbox compact iframe-visibility">
+              <input type="checkbox" name="widget__{{ tracker.key }}" {% if tracker.visible_widget %}checked{% endif %}>
+              iFrame
+            </label>
+          </div>
+          <div class="linked-domains">
+            {% for domain in tracker.domains %}
+            <label class="linked-domain-row">
+              <input class="domain-checkbox" data-group="{{ group_id }}" form="group-form" type="checkbox" name="domains" value="{{ domain }}">
+              <span>{{ domain }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </details>
+      {% else %}
+      <div class="empty">Les adresses apparaitront apres la premiere collecte.</div>
+      {% endfor %}
+    </div>
+    {% if trackers %}
+    <div class="global-save">
+      <button class="button" type="submit">Sauver les reglages</button>
+    </div>
+    {% endif %}
+  </form>
+</section>
+
+<script>
+  (() => {
+    const checkboxes = Array.from(document.querySelectorAll(".domain-checkbox"));
+    const groupCheckboxes = Array.from(document.querySelectorAll(".group-checkbox"));
+    let previousDomain = null;
+    let previousGroup = null;
+
+    const domainsForGroup = (group) => checkboxes.filter((checkbox) => checkbox.dataset.group === group);
+
+    const updateGroupCheckbox = (group) => {
+      const groupCheckbox = groupCheckboxes.find((checkbox) => checkbox.dataset.group === group);
+      const groupDomains = domainsForGroup(group);
+      if (!groupCheckbox || groupDomains.length === 0) {
+        return;
+      }
+      const checkedCount = groupDomains.filter((checkbox) => checkbox.checked).length;
+      groupCheckbox.checked = checkedCount === groupDomains.length;
+      groupCheckbox.indeterminate = checkedCount > 0 && checkedCount < groupDomains.length;
+    };
+
+    const applyGroupSelection = (checkbox) => {
+      domainsForGroup(checkbox.dataset.group).forEach((domainCheckbox) => {
+        domainCheckbox.checked = checkbox.checked;
+      });
+      checkbox.indeterminate = false;
+    };
+
+    groupCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (event.shiftKey && previousGroup) {
+          const start = groupCheckboxes.indexOf(previousGroup);
+          const end = groupCheckboxes.indexOf(checkbox);
+          const first = Math.min(start, end);
+          const last = Math.max(start, end);
+          for (let index = first; index <= last; index += 1) {
+            groupCheckboxes[index].checked = checkbox.checked;
+            applyGroupSelection(groupCheckboxes[index]);
+          }
+        }
+        previousGroup = checkbox;
+      });
+      checkbox.addEventListener("change", () => {
+        applyGroupSelection(checkbox);
+      });
+    });
+
+    checkboxes.forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => {
+        if (event.shiftKey && previousDomain) {
+          const start = checkboxes.indexOf(previousDomain);
+          const end = checkboxes.indexOf(checkbox);
+          const first = Math.min(start, end);
+          const last = Math.max(start, end);
+          for (let index = first; index <= last; index += 1) {
+            checkboxes[index].checked = checkbox.checked;
+            updateGroupCheckbox(checkboxes[index].dataset.group);
+          }
+        }
+        updateGroupCheckbox(checkbox.dataset.group);
+        previousDomain = checkbox;
+      });
+    });
+  })();
+</script>
+{% endblock %}

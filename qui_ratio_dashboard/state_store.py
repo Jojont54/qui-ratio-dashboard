@@ -2,14 +2,14 @@ import json
 import os
 from threading import Lock
 
-STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
-STATE_VERSION = 2
+STATE_PATH = "/data/state.json"
+STATE_VERSION = 4
 
 _lock = Lock()
 
 
 def _empty_state():
-    return {"version": STATE_VERSION, "trackers": {}}
+    return {"version": STATE_VERSION, "transfers": {}, "legacy_adjustments": {}}
 
 
 def _ensure_state_file():
@@ -37,16 +37,6 @@ def _save_state_unlocked(state):
     with open(temp_path, "w") as f:
         json.dump(state, f, indent=2)
     os.replace(temp_path, STATE_PATH)
-
-
-def load_state():
-    with _lock:
-        return _load_state_unlocked()
-
-
-def save_state(state):
-    with _lock:
-        _save_state_unlocked(state)
 
 
 def _migrate_tracker_state(tracker, current_uploaded, current_downloaded):
@@ -82,53 +72,118 @@ def _migrate_tracker_state(tracker, current_uploaded, current_downloaded):
         "carried_uploaded": 0,
         "carried_downloaded": 0,
     }
+def _legacy_adjustments(state, rows, domain_to_key):
+    if "legacy_adjustments" in state:
+        return state.get("legacy_adjustments", {})
+
+    current_by_tracker = {}
+    for row in rows:
+        key = domain_to_key.get(row["domain"], row["domain"])
+        totals = current_by_tracker.setdefault(key, {"uploaded": 0, "downloaded": 0})
+        totals["uploaded"] += int(row["uploaded"])
+        totals["downloaded"] += int(row["downloaded"])
+
+    adjustments = {}
+    for key, tracker in (state.get("trackers") or {}).items():
+        current = current_by_tracker.get(key, {"uploaded": 0, "downloaded": 0})
+        migrated = _migrate_tracker_state(
+            tracker, current["uploaded"], current["downloaded"]
+        )
+        adjustments[key] = {
+            "uploaded": migrated["carried_uploaded"],
+            "downloaded": migrated["carried_downloaded"],
+        }
+    return adjustments
 
 
-def apply_state_ledger(rows):
+def _credited_transfer(tracker, current_uploaded, current_downloaded):
+    if "credited_uploaded" in tracker:
+        return {
+            "raw_uploaded": int(tracker.get("raw_uploaded", current_uploaded)),
+            "raw_downloaded": int(tracker.get("raw_downloaded", current_downloaded)),
+            "credited_uploaded": int(tracker["credited_uploaded"]),
+            "credited_downloaded": int(tracker["credited_downloaded"]),
+        }
+
+    migrated = _migrate_tracker_state(tracker, current_uploaded, current_downloaded)
+    return {
+        "raw_uploaded": migrated["raw_uploaded"],
+        "raw_downloaded": migrated["raw_downloaded"],
+        "credited_uploaded": migrated["raw_uploaded"] + migrated["carried_uploaded"],
+        "credited_downloaded": migrated["raw_downloaded"] + migrated["carried_downloaded"],
+    }
+
+
+def _credited_delta(value, multiplier):
+    return int(round(int(value) * float(multiplier)))
+
+
+def apply_domain_ledger(rows, domain_to_key, trackers=None):
+    trackers = trackers or {}
     with _lock:
         state = _load_state_unlocked()
-        state["version"] = STATE_VERSION
-        trackers = state.setdefault("trackers", {})
+        adjustments = _legacy_adjustments(state, rows, domain_to_key)
+        transfers = state.get("transfers") if int(state.get("version", 0)) >= 3 else {}
+        transfers = transfers or {}
+        seen_transfers = {row.get("ledger_key", row["domain"]) for row in rows}
+        for row in rows:
+            ledger_key = row.get("ledger_key", row["domain"])
+            domain = row["domain"]
+            if ledger_key != domain and ledger_key not in transfers and domain in transfers:
+                transfers[ledger_key] = transfers.pop(domain)
+        for ledger_key, transfer in transfers.items():
+            if ledger_key not in seen_transfers:
+                domain = transfer.get("domain", ledger_key)
+                rows.append(
+                    {
+                        "tracker": domain,
+                        "_key": domain,
+                        "domain": domain,
+                        "ledger_key": ledger_key,
+                        "uploaded": 0,
+                        "downloaded": 0,
+                        "manual_buffer_uploaded": 0,
+                        "manual_buffer_downloaded": 0,
+                        "count": 0,
+                        "total_size": 0,
+                    }
+                )
 
-        for r in rows:
-            key = r["_key"] if "_key" in r else r["tracker"]
-            current_u = int(r["uploaded"])
-            current_d = int(r["downloaded"])
-            manual_u = int(r.get("manual_buffer_uploaded", 0))
-            manual_d = int(r.get("manual_buffer_downloaded", 0))
-
-            tracker = _migrate_tracker_state(trackers.get(key, {}), current_u, current_d)
+        for row in rows:
+            domain = row["domain"]
+            ledger_key = row.get("ledger_key", domain)
+            current_u = int(row["uploaded"])
+            current_d = int(row["downloaded"])
+            key = domain_to_key.get(domain, domain)
+            config = trackers.get(key, {})
+            multiplier_u = float(config.get("event_uploaded_multiplier", 1))
+            multiplier_d = float(config.get("event_downloaded_multiplier", 1))
+            tracker = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
             previous_u = tracker["raw_uploaded"]
             previous_d = tracker["raw_downloaded"]
-
-            if current_u < previous_u:
-                tracker["carried_uploaded"] += previous_u - current_u
-            if current_d < previous_d:
-                tracker["carried_downloaded"] += previous_d - current_d
-
+            if current_u > previous_u:
+                tracker["credited_uploaded"] += _credited_delta(
+                    current_u - previous_u, multiplier_u
+                )
+            if current_d > previous_d:
+                tracker["credited_downloaded"] += _credited_delta(
+                    current_d - previous_d, multiplier_d
+                )
             tracker["raw_uploaded"] = current_u
             tracker["raw_downloaded"] = current_d
-            trackers[key] = tracker
+            tracker["domain"] = domain
+            transfers[ledger_key] = tracker
+            row["raw_uploaded"] = current_u
+            row["raw_downloaded"] = current_d
+            row["uploaded"] = tracker["credited_uploaded"]
+            row["downloaded"] = tracker["credited_downloaded"]
+            row["carried_uploaded"] = tracker["credited_uploaded"] - current_u
+            row["carried_downloaded"] = tracker["credited_downloaded"] - current_d
 
-            tracked_u = current_u + tracker["carried_uploaded"]
-            tracked_d = current_d + tracker["carried_downloaded"]
-            displayed_u = tracked_u + manual_u
-            displayed_d = tracked_d + manual_d
-
-            r["raw_uploaded"] = current_u
-            r["raw_downloaded"] = current_d
-            r["tracked_uploaded"] = tracked_u
-            r["tracked_downloaded"] = tracked_d
-            r["floor_uploaded"] = tracked_u
-            r["floor_downloaded"] = tracked_d
-            r["carried_uploaded"] = tracker["carried_uploaded"]
-            r["carried_downloaded"] = tracker["carried_downloaded"]
-            r["uploaded"] = displayed_u
-            r["downloaded"] = displayed_d
-            r["delta"] = displayed_u - displayed_d
-            r["ratio"] = (displayed_u / displayed_d) if displayed_d > 0 else float("inf")
-
+        state = {
+            "version": STATE_VERSION,
+            "transfers": transfers,
+            "legacy_adjustments": adjustments,
+        }
         _save_state_unlocked(state)
-
-    rows.sort(key=lambda r: (r["ratio"] if r["ratio"] != float("inf") else 1e99))
-    return rows
+    return rows, adjustments

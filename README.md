@@ -1,7 +1,8 @@
 ## qui-ratio-dashboard
 
-Tiny dashboard displaying per-tracker ratios from QUI aggregated stats, for local
-use or embedding behind Homarr authentication.
+Self-hosted tracker ratio dashboard currently powered by QUI, with a compact
+Homarr widget and the first management screens for a larger multi-client
+application.
 
 The dashboard preserves totals from torrents removed from QUI. It records
 visible decreases in `/data/state.json` and carries them into later totals, so
@@ -15,23 +16,56 @@ site but unavailable in QUI. The result matches activity observed by QUI after
 that baseline; activity completed and deleted between two dashboard reads
 cannot be reconstructed without a direct tracker API.
 
-Configuration variables:
+## Interface
 
-- `QUI_BASE_URL`
-- `QUI_INSTANCE_ID`
-- `QUI_API_KEY`
-- `HTTP_TIMEOUT`
-- `BACKGROUND_REFRESH_ENABLED` (`1` by default)
-- `REFRESH_INTERVAL_SECONDS` (`3600` by default)
-- `HOMARR_AUTH_ENABLED`
-- `HOMARR_BASE_URL`
-- `HOMARR_SESSION_ENDPOINT`
-- `BUFFERS_PATH`
-- `TRACKERS_PATH`
-- `STATE_PATH`
-- `PORT`
+- `/`: full dashboard interface.
+- `/trackers`: select detected domains, link them to a common display
+  name, and manage visibility and buffers.
+- `/clients`: add or remove QUI connections and select the qBittorrent
+  instance exposed by each QUI server.
+- `/options`: enable or disable the Homarr iFrame endpoint.
+- `/iframe` or `/widget`: compact read-only iFrame, compatible with Homarr.
 
-`trackers.yml` maps several tracker domains to one displayed tracker. Set
-`visible: false` on a tracker to hide it from the web page while keeping its
-history and API data; if omitted, the tracker remains visible.
-`buffers.yml` adds an initial upload/download baseline.
+The former `/app/` and `/app/trackers` paths remain available for compatibility.
+
+On the first start after this version is installed, `trackers.yml` and
+`buffers.yml` are imported into `/data/ratio_dashboard.db`. After that import,
+the SQLite database is the active configuration source and edits should be
+made through the interface. Keep the YAML files as an initial import or
+backup reference.
+
+QUI servers are configured from the Clients torrent screen with the `+`
+button: enter the QUI address, port and API key, load its available qBittorrent
+instances, then select the instance whose transfer totals should be collected.
+Existing connections can be edited without re-entering the API key, or deleted
+from their card. Totals from all configured clients are consolidated by
+tracker.
+
+The Options screen can disable the compact iFrame globally. When disabled,
+`/iframe` and its compatibility alias `/widget` are unavailable, while saved
+per-tracker iFrame visibility is retained for a later reactivation.
+
+Homarr authentication is also configured from Options: enable it, provide
+the Homarr address and its session endpoint, then save. Once enabled, a valid
+Homarr session is required to access the application.
+
+The Options screen also controls background collection and API timeout. The
+automatic refresh is enabled by default and runs hourly; both its activation
+and interval can be changed without restarting the container.
+
+Docker only exposes port `8787` and persists `/data`; no `.env` connection
+configuration is required anymore.
+
+Unknown tracker domains discovered during collection are added automatically
+to the Trackers screen. Each display name expands to show its linked domains:
+select domains and use the link button to join them under one name, or the
+unlink button to return them to individual trackers. The Dashboard and Homarr
+widget show one consolidated row per name. Select all domains of an existing
+group and link them to a new name to rename it while keeping its buffers.
+The display name, visibility and buffers are edited in the same screen and
+saved together with the global save button. Upload and download event menus
+can be used for double/triple upload, silverleech and freeleech periods.
+Event multipliers apply only to transfer progress collected after the setting
+is enabled; existing totals are not recalculated. A remaining-hours field can
+set an automatic end for each event. Once that time is reached, the event
+returns to normal on the next collection.
