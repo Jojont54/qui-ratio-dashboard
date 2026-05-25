@@ -45,6 +45,12 @@
         <dd>#{{ client.instance_id }}</dd>
         <dt>Cle API</dt>
         <dd>{{ client.api_key_hint }}</dd>
+        <dt>Depart</dt>
+        <dd>
+          {% if client.sync_pending %}En attente :
+          {% endif %}
+          {% if client.initial_sync_mode == "replace" %}effacement{% elif client.initial_sync_mode == "add" %}ajout{% else %}reference conservee{% endif %}
+        </dd>
       </dl>
     </article>
     <dialog class="client-dialog" id="edit-client-dialog-{{ client.id }}">
@@ -82,6 +88,25 @@
             <option value="{{ client.instance_id }}" selected>Instance actuelle (#{{ client.instance_id }})</option>
           </select>
         </label>
+        <fieldset class="sync-mode">
+          <legend>A la prochaine connexion</legend>
+          <label class="radio-option">
+            <input type="radio" name="initial_sync_mode" value="" checked>
+            <span>Ne rien changer <small>Continue avec l'historique actuel.</small></span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="initial_sync_mode" value="replace">
+            <span>Effacer les valeurs stockees <small>Repart directement des valeurs envoyees par QUI.</small></span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="initial_sync_mode" value="add">
+            <span>Ajouter aux valeurs stockees <small>Utile pour une seconde instance.</small></span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="initial_sync_mode" value="preserve">
+            <span>Conserver les valeurs stockees <small>Le premier releve sert de reference, sans changement immediat.</small></span>
+          </label>
+        </fieldset>
         <div class="dialog-actions">
           <button class="button secondary" type="button" data-close-dialog>Annuler</button>
           <button class="button" type="submit">Sauver</button>
@@ -129,6 +154,21 @@
         <option value="">Chargez les instances disponibles</option>
       </select>
     </label>
+    <fieldset class="sync-mode">
+      <legend>Valeurs au premier releve (choix obligatoire)</legend>
+      <label class="radio-option">
+        <input type="radio" name="initial_sync_mode" value="replace" required>
+        <span>Effacer les valeurs stockees <small>Affiche directement les valeurs envoyees par QUI.</small></span>
+      </label>
+      <label class="radio-option">
+        <input type="radio" name="initial_sync_mode" value="add">
+        <span>Ajouter aux valeurs stockees <small>Utile quand cette instance s'ajoute aux autres.</small></span>
+      </label>
+      <label class="radio-option">
+        <input type="radio" name="initial_sync_mode" value="preserve">
+        <span>Conserver les valeurs stockees <small>Recommande pour reparer une connexion ou apres migration.</small></span>
+      </label>
+    </fieldset>
     <div class="dialog-actions">
       <button class="button secondary" type="button" data-close-dialog>Annuler</button>
       <button class="button" type="submit">Ajouter</button>

@@ -107,6 +107,12 @@ p, .muted { color: var(--muted); }
 .instance-discovery .button { white-space: nowrap; }
 .instance-status { color: var(--muted); font-size: 12px; line-height: 1.4; }
 .dialog-actions { margin-top: 8px; display: flex; gap: 10px; justify-content: flex-end; }
+.sync-mode { margin: 0; padding: 13px; border: 1px solid var(--border); border-radius: 7px; display: grid; gap: 11px; }
+.sync-mode legend { padding: 0 7px; color: var(--muted); font-size: 13px; }
+.radio-option { display: flex; flex-direction: row; align-items: start; gap: 10px; color: var(--text); cursor: pointer; }
+.radio-option input { width: auto; margin-top: 3px; }
+.radio-option span { display: grid; gap: 3px; font-size: 13px; }
+.radio-option small { color: var(--muted); line-height: 1.35; }
 .options-panel { max-width: 720px; }
 .options-form { display: grid; gap: 18px; }
 .option-row { display: flex; justify-content: space-between; align-items: center; gap: 30px; background: var(--panel-soft); padding: 18px; border-radius: 8px; }

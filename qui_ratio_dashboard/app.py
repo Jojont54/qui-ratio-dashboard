@@ -1,12 +1,14 @@
 import math
 import requests
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from urllib.parse import urlsplit
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
 from .database import (
     add_torrent_client,
+    clear_tracker_buffers,
+    complete_client_initializations,
     delete_torrent_client,
     get_app_options,
     get_torrent_client,
@@ -32,12 +34,24 @@ app = Flask(__name__)
 init_database()
 _refresh_stop = Event()
 _refresh_wake = Event()
+_refresh_lock = Lock()
 
 
 def refresh_rows():
+    with _refresh_lock:
+        return _refresh_rows_locked()
+
+
+def _refresh_rows_locked():
     options = get_app_options()
     configured_clients = list_torrent_clients()
+    pending_initializations = {
+        client["id"]: client["initial_sync_mode"]
+        for client in configured_clients
+        if client["sync_pending"]
+    }
     domain_rows = []
+    successful_clients = set()
     errors = []
     for configured_client in configured_clients:
         try:
@@ -50,13 +64,19 @@ def refresh_rows():
             client_rows = compute_domain_rows(client.fetch_torrents_summary())
             for row in client_rows:
                 row["ledger_key"] = f"client:{configured_client['id']}:{row['domain']}"
+                row["client_id"] = configured_client["id"]
             domain_rows.extend(client_rows)
+            successful_clients.add(configured_client["id"])
         except Exception as error:
             errors.append(f"{configured_client['name']}: {error}")
     if errors:
         raise RuntimeError("Unable to collect all clients: " + "; ".join(errors))
     domain_to_key, trackers = load_tracker_configuration(row["domain"] for row in domain_rows)
-    domain_rows, legacy_adjustments = apply_domain_ledger(domain_rows, domain_to_key, trackers)
+    domain_rows, legacy_adjustments, replaced_keys, initialized_clients = apply_domain_ledger(
+        domain_rows, domain_to_key, trackers, pending_initializations, successful_clients
+    )
+    clear_tracker_buffers(replaced_keys)
+    complete_client_initializations(initialized_clients)
     return aggregate_tracker_rows(domain_rows, legacy_adjustments)
 
 
@@ -250,6 +270,7 @@ def add_client():
         request.form.get("port", ""),
         request.form.get("api_key", ""),
         request.form.get("instance_id", "1"),
+        request.form.get("initial_sync_mode", "preserve"),
     )
     return redirect(url_for("torrent_clients"))
 
@@ -269,6 +290,7 @@ def update_client(client_id):
         request.form.get("port", ""),
         request.form.get("api_key", ""),
         request.form.get("instance_id", "1"),
+        request.form.get("initial_sync_mode", ""),
     )
     return redirect(url_for("torrent_clients"))
 

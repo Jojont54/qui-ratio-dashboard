@@ -397,6 +397,11 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(clients[0]["base_url"], "https://qui.example:7476")
         self.assertEqual(clients[0]["instance_id"], "3")
         self.assertEqual(clients[0]["api_key_hint"], "******1234")
+        self.assertEqual(clients[0]["initial_sync_mode"], "preserve")
+        self.assertTrue(clients[0]["sync_pending"])
+
+        database.complete_client_initializations([client_id])
+        self.assertFalse(database.list_torrent_clients()[0]["sync_pending"])
 
         database.delete_torrent_client(client_id)
         self.assertEqual(database.list_torrent_clients(), [])
@@ -418,10 +423,42 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(client["instance_id"], "9")
         self.assertEqual(client["api_key"], "secret-key")
 
+        database.complete_client_initializations([client_id])
         database.update_torrent_client(
-            client_id, "Maison", "https://new.example", "8080", "new-key", "9"
+            client_id, "Maison", "https://new.example", "8080", "new-key", "9", "add"
         )
-        self.assertEqual(database.list_torrent_clients()[0]["api_key"], "new-key")
+        client = database.list_torrent_clients()[0]
+        self.assertEqual(client["api_key"], "new-key")
+        self.assertEqual(client["initial_sync_mode"], "add")
+        self.assertTrue(client["sync_pending"])
+
+    def test_replacing_client_values_can_clear_only_selected_tracker_buffers(self):
+        first = database.create_tracker("Premier")
+        second = database.create_tracker("Second")
+        database.update_trackers(
+            {
+                first: {
+                    "display_name": "Premier",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "10 GiB",
+                    "downloaded_add": "2 GiB",
+                },
+                second: {
+                    "display_name": "Second",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "20 GiB",
+                    "downloaded_add": "4 GiB",
+                },
+            }
+        )
+
+        database.clear_tracker_buffers([first])
+        _, settings = database.load_tracker_configuration()
+        self.assertEqual(settings[first]["uploaded_add"], 0)
+        self.assertEqual(settings[first]["downloaded_add"], 0)
+        self.assertGreater(settings[second]["uploaded_add"], 0)
 
     def test_iframe_option_is_enabled_by_default_and_can_be_disabled(self):
         database.init_database()

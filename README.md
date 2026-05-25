@@ -48,7 +48,12 @@ button: enter the QUI address, port and API key, load its available qBittorrent
 instances, then select the instance whose transfer totals should be collected.
 Existing connections can be edited without re-entering the API key, or deleted
 from their card. Totals from all configured clients are consolidated by
-tracker.
+tracker. When a connection is created or deliberately reinitialized, choose
+how its first reading is handled: keep stored values as the baseline for a
+repaired connection or rebuild, add current values for an additional
+instance, or erase stored tracker values and replace them with the client's
+current totals. This choice is required for a new connection so a first client
+is not mistaken for a repaired connection.
 
 The Options screen can disable the compact iFrame globally. When disabled,
 `/iframe` and its compatibility alias `/widget` are unavailable, while saved

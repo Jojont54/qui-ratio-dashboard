@@ -118,13 +118,38 @@ def _credited_delta(value, multiplier):
     return int(round(int(value) * float(multiplier)))
 
 
-def apply_domain_ledger(rows, domain_to_key, trackers=None):
+def apply_domain_ledger(
+    rows, domain_to_key, trackers=None, client_initializations=None, successful_client_ids=None
+):
     trackers = trackers or {}
+    client_initializations = client_initializations or {}
+    if successful_client_ids is None:
+        successful_client_ids = {row.get("client_id") for row in rows}
+    active_initializations = {
+        client_id: mode
+        for client_id, mode in client_initializations.items()
+        if client_id in successful_client_ids and mode in {"replace", "add", "preserve"}
+    }
+    initialization_by_ledger = {}
+    replace_all = "replace" in active_initializations.values()
+    replace_keys = (set(trackers) | set(domain_to_key.values())) if replace_all else set()
+    initialized_client_ids = set(active_initializations)
+    for row in rows:
+        client_id = row.get("client_id")
+        mode = active_initializations.get(client_id)
+        if mode is None:
+            continue
+        ledger_key = row.get("ledger_key", row["domain"])
+        initialization_by_ledger[ledger_key] = mode
     with _lock:
         state = _load_state_unlocked()
         adjustments = _legacy_adjustments(state, rows, domain_to_key)
+        if replace_all:
+            adjustments = {}
         transfers = state.get("transfers") if int(state.get("version", 0)) >= 3 else {}
         transfers = transfers or {}
+        if replace_all:
+            transfers = {}
         seen_transfers = {row.get("ledger_key", row["domain"]) for row in rows}
         for row in rows:
             ledger_key = row.get("ledger_key", row["domain"])
@@ -158,7 +183,35 @@ def apply_domain_ledger(rows, domain_to_key, trackers=None):
             config = trackers.get(key, {})
             multiplier_u = float(config.get("event_uploaded_multiplier", 1))
             multiplier_d = float(config.get("event_downloaded_multiplier", 1))
-            tracker = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
+            initialization = initialization_by_ledger.get(ledger_key)
+            if initialization == "preserve" and not replace_all:
+                existing = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
+                tracker = {
+                    "raw_uploaded": current_u,
+                    "raw_downloaded": current_d,
+                    "credited_uploaded": (
+                        existing["credited_uploaded"] if ledger_key in transfers else 0
+                    ),
+                    "credited_downloaded": (
+                        existing["credited_downloaded"] if ledger_key in transfers else 0
+                    ),
+                }
+            elif initialization == "add" and not replace_all:
+                existing = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
+                tracker = {
+                    "raw_uploaded": current_u,
+                    "raw_downloaded": current_d,
+                    "credited_uploaded": (
+                        existing["credited_uploaded"] if ledger_key in transfers else 0
+                    )
+                    + current_u,
+                    "credited_downloaded": (
+                        existing["credited_downloaded"] if ledger_key in transfers else 0
+                    )
+                    + current_d,
+                }
+            else:
+                tracker = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
             previous_u = tracker["raw_uploaded"]
             previous_d = tracker["raw_downloaded"]
             if current_u > previous_u:
@@ -186,4 +239,4 @@ def apply_domain_ledger(rows, domain_to_key, trackers=None):
             "legacy_adjustments": adjustments,
         }
         _save_state_unlocked(state)
-    return rows, adjustments
+    return rows, adjustments, replace_keys, initialized_client_ids

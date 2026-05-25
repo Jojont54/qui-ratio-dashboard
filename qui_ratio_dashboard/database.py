@@ -153,7 +153,9 @@ def init_database():
                 address TEXT NOT NULL,
                 port INTEGER,
                 api_key TEXT NOT NULL,
-                instance_id TEXT NOT NULL DEFAULT '1'
+                instance_id TEXT NOT NULL DEFAULT '1',
+                initial_sync_mode TEXT NOT NULL DEFAULT 'preserve',
+                sync_pending INTEGER NOT NULL DEFAULT 0
             );
             """
         )
@@ -174,6 +176,12 @@ def init_database():
         )
         _add_column_if_missing(
             connection, "trackers", "event_downloaded_expires_at", "TEXT"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "initial_sync_mode", "TEXT NOT NULL DEFAULT 'preserve'"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "sync_pending", "INTEGER NOT NULL DEFAULT 0"
         )
         _migrate_legacy_yaml_once(connection)
         _remove_example_placeholder(connection)
@@ -255,6 +263,11 @@ def _client_base_url(address, port):
     return base
 
 
+def _initial_sync_mode(value, default="preserve"):
+    mode = str(value or "").strip().lower()
+    return mode if mode in {"replace", "add", "preserve"} else default
+
+
 def list_torrent_clients():
     init_database()
     with _lock, _database() as connection:
@@ -276,12 +289,14 @@ def list_torrent_clients():
                 else "*" * len(row["api_key"])
             ),
             "instance_id": row["instance_id"],
+            "initial_sync_mode": _initial_sync_mode(row["initial_sync_mode"]),
+            "sync_pending": bool(row["sync_pending"]),
         }
         for row in rows
     ]
 
 
-def add_torrent_client(name, address, port, api_key, instance_id="1"):
+def add_torrent_client(name, address, port, api_key, instance_id="1", initial_sync_mode="preserve"):
     init_database()
     clean_address = str(address).strip().rstrip("/")
     clean_api_key = str(api_key).strip()
@@ -294,8 +309,11 @@ def add_torrent_client(name, address, port, api_key, instance_id="1"):
     with _lock, _database() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO torrent_clients (name, client_type, address, port, api_key, instance_id)
-            VALUES (?, 'QUI', ?, ?, ?, ?)
+            INSERT INTO torrent_clients (
+                name, client_type, address, port, api_key, instance_id,
+                initial_sync_mode, sync_pending
+            )
+            VALUES (?, 'QUI', ?, ?, ?, ?, ?, 1)
             """,
             (
                 str(name).strip() or "QUI",
@@ -303,12 +321,15 @@ def add_torrent_client(name, address, port, api_key, instance_id="1"):
                 clean_port,
                 clean_api_key,
                 str(instance_id).strip() or "1",
+                _initial_sync_mode(initial_sync_mode),
             ),
         )
         return int(cursor.lastrowid)
 
 
-def update_torrent_client(client_id, name, address, port, api_key, instance_id):
+def update_torrent_client(
+    client_id, name, address, port, api_key, instance_id, initial_sync_mode=""
+):
     init_database()
     clean_address = str(address).strip().rstrip("/")
     if not clean_address:
@@ -319,15 +340,25 @@ def update_torrent_client(client_id, name, address, port, api_key, instance_id):
         return False
     with _lock, _database() as connection:
         current = connection.execute(
-            "SELECT api_key FROM torrent_clients WHERE id = ?", (int(client_id),)
+            "SELECT api_key, initial_sync_mode, sync_pending FROM torrent_clients WHERE id = ?",
+            (int(client_id),),
         ).fetchone()
         if current is None:
             return False
         clean_api_key = str(api_key).strip() or current["api_key"]
+        requested_mode = str(initial_sync_mode or "").strip().lower()
+        reset_requested = requested_mode in {"replace", "add", "preserve"}
+        clean_mode = (
+            _initial_sync_mode(requested_mode)
+            if reset_requested
+            else _initial_sync_mode(current["initial_sync_mode"])
+        )
+        sync_pending = 1 if reset_requested else int(current["sync_pending"])
         connection.execute(
             """
             UPDATE torrent_clients
-            SET name = ?, address = ?, port = ?, api_key = ?, instance_id = ?
+            SET name = ?, address = ?, port = ?, api_key = ?, instance_id = ?,
+                initial_sync_mode = ?, sync_pending = ?
             WHERE id = ?
             """,
             (
@@ -336,6 +367,8 @@ def update_torrent_client(client_id, name, address, port, api_key, instance_id):
                 clean_port,
                 clean_api_key,
                 str(instance_id).strip() or "1",
+                clean_mode,
+                sync_pending,
                 int(client_id),
             ),
         )
@@ -353,6 +386,39 @@ def delete_torrent_client(client_id):
     init_database()
     with _lock, _database() as connection:
         connection.execute("DELETE FROM torrent_clients WHERE id = ?", (int(client_id),))
+
+
+def clear_tracker_buffers(keys):
+    clean_keys = sorted({str(key) for key in keys if str(key)})
+    if not clean_keys:
+        return
+    init_database()
+    with _lock, _database() as connection:
+        connection.execute(
+            f"""
+            UPDATE trackers
+            SET buffer_uploaded = 0, buffer_downloaded = 0,
+                buffer_uploaded_text = '0 B', buffer_downloaded_text = '0 B'
+            WHERE key IN ({",".join("?" for _ in clean_keys)})
+            """,
+            clean_keys,
+        )
+
+
+def complete_client_initializations(client_ids):
+    ids = sorted({int(client_id) for client_id in client_ids})
+    if not ids:
+        return
+    init_database()
+    with _lock, _database() as connection:
+        connection.execute(
+            f"""
+            UPDATE torrent_clients
+            SET sync_pending = 0
+            WHERE id IN ({",".join("?" for _ in ids)})
+            """,
+            ids,
+        )
 
 
 def _stored_int(stored, key, default):

@@ -302,7 +302,7 @@ class TrackerVisibilityTests(unittest.TestCase):
                 }
             )
             mapping, settings = database.load_tracker_configuration(["shown.example"])
-            rows, legacy = state_store.apply_domain_ledger(rows, mapping, settings)
+            rows, legacy, _, _ = state_store.apply_domain_ledger(rows, mapping, settings)
             return formatters.aggregate_tracker_rows(rows, legacy)[0]
 
         before_delete = refresh(300 * gib, 100 * gib, 2, 80 * gib)
@@ -346,7 +346,7 @@ class TrackerVisibilityTests(unittest.TestCase):
                 }
             )
             mapping, settings = database.load_tracker_configuration(["shown.example"])
-            rows, legacy = state_store.apply_domain_ledger(rows, mapping, settings)
+            rows, legacy, _, _ = state_store.apply_domain_ledger(rows, mapping, settings)
             return formatters.aggregate_tracker_rows(rows, legacy)[0]
 
         baseline = refresh(300 * gib, 100 * gib, 2, 80 * gib)

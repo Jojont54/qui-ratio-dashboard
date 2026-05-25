@@ -17,7 +17,7 @@ class DomainLedgerTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def apply(self, rows, mapping=None):
-        return state_store.apply_domain_ledger(rows, mapping or {})
+        return state_store.apply_domain_ledger(rows, mapping or {})[:2]
 
     def domain_row(self, domain, uploaded, downloaded):
         return {
@@ -72,7 +72,7 @@ class DomainLedgerTests(unittest.TestCase):
                 "event_downloaded_multiplier": 0.5,
             }
         }
-        rows, _ = state_store.apply_domain_ledger(
+        rows, _, _, _ = state_store.apply_domain_ledger(
             [self.domain_row("tracker.ygg.example", 100, 50)],
             {"tracker.ygg.example": "ygg"},
             settings,
@@ -80,7 +80,7 @@ class DomainLedgerTests(unittest.TestCase):
         self.assertEqual(rows[0]["uploaded"], 100)
         self.assertEqual(rows[0]["downloaded"], 50)
 
-        rows, _ = state_store.apply_domain_ledger(
+        rows, _, _, _ = state_store.apply_domain_ledger(
             [self.domain_row("tracker.ygg.example", 110, 60)],
             {"tracker.ygg.example": "ygg"},
             settings,
@@ -88,7 +88,7 @@ class DomainLedgerTests(unittest.TestCase):
         self.assertEqual(rows[0]["uploaded"], 120)
         self.assertEqual(rows[0]["downloaded"], 55)
 
-        rows, _ = state_store.apply_domain_ledger(
+        rows, _, _, _ = state_store.apply_domain_ledger(
             [self.domain_row("tracker.ygg.example", 120, 70)],
             {"tracker.ygg.example": "ygg"},
             {"ygg": {"event_uploaded_multiplier": 1, "event_downloaded_multiplier": 0}},
@@ -112,6 +112,83 @@ class DomainLedgerTests(unittest.TestCase):
 
         self.assertEqual(sum(row["uploaded"] for row in rows), 200)
         self.assertEqual(sum(row["downloaded"] for row in rows), 55)
+
+    def client_row(self, client_id, uploaded, downloaded):
+        row = self.domain_row("tracker.example", uploaded, downloaded)
+        row["ledger_key"] = f"client:{client_id}:tracker.example"
+        row["client_id"] = client_id
+        return row
+
+    def test_preserve_initialization_uses_incoming_totals_only_as_a_new_reference(self):
+        rows, _, _, initialized = state_store.apply_domain_ledger(
+            [self.client_row(1, 100, 50)],
+            {"tracker.example": "tracker"},
+            client_initializations={1: "preserve"},
+        )
+        self.assertEqual(rows[0]["uploaded"], 0)
+        self.assertEqual(rows[0]["downloaded"], 0)
+        self.assertEqual(initialized, {1})
+
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [self.client_row(1, 110, 54)], {"tracker.example": "tracker"}
+        )
+        self.assertEqual(rows[0]["uploaded"], 10)
+        self.assertEqual(rows[0]["downloaded"], 4)
+
+    def test_preserve_initialization_does_not_add_repaired_connection_totals(self):
+        state_store.apply_domain_ledger(
+            [self.client_row(1, 100, 50)], {"tracker.example": "tracker"}
+        )
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [self.client_row(1, 300, 200)],
+            {"tracker.example": "tracker"},
+            client_initializations={1: "preserve"},
+        )
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
+
+    def test_add_initialization_credits_client_totals_on_top_of_stored_values(self):
+        state_store.apply_domain_ledger(
+            [self.client_row(1, 100, 50)], {"tracker.example": "tracker"}
+        )
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [self.client_row(1, 30, 20)],
+            {"tracker.example": "tracker"},
+            client_initializations={1: "add"},
+        )
+        self.assertEqual(rows[0]["uploaded"], 130)
+        self.assertEqual(rows[0]["downloaded"], 70)
+
+    def test_replace_initialization_removes_stored_tracker_history(self):
+        state_store.apply_domain_ledger(
+            [self.client_row(1, 100, 50)], {"tracker.example": "tracker"}
+        )
+        rows, adjustments, replace_keys, initialized = state_store.apply_domain_ledger(
+            [self.client_row(2, 30, 20)],
+            {"tracker.example": "tracker"},
+            client_initializations={2: "replace"},
+        )
+        self.assertEqual(rows[0]["uploaded"], 30)
+        self.assertEqual(rows[0]["downloaded"], 20)
+        self.assertEqual(adjustments, {})
+        self.assertEqual(replace_keys, {"tracker"})
+        self.assertEqual(initialized, {2})
+
+    def test_replace_initialization_can_clear_history_even_when_client_is_empty(self):
+        state_store.apply_domain_ledger(
+            [self.client_row(1, 100, 50)], {"tracker.example": "tracker"}
+        )
+        rows, adjustments, replace_keys, initialized = state_store.apply_domain_ledger(
+            [],
+            {},
+            {"tracker": {}},
+            {2: "replace"},
+            {2},
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(adjustments, {})
+        self.assertEqual(replace_keys, {"tracker"})
+        self.assertEqual(initialized, {2})
 
 
 if __name__ == "__main__":
