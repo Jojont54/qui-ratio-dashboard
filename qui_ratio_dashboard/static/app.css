@@ -34,6 +34,7 @@ p, .muted { color: var(--muted); }
 .sidebar-source strong { color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-source.failed strong { color: var(--red); }
 .sidebar-source span, .sidebar-empty { color: var(--muted); font-size: 11px; }
+.form-error { margin-bottom: 16px; border-color: var(--red); color: var(--red); padding: 14px 16px; }
 .content { width: 100%; margin-left: 224px; padding: 34px; }
 .page-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 28px; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 20px; }
@@ -123,6 +124,8 @@ p, .muted { color: var(--muted); }
 .option-card { display: grid; gap: 18px; }
 .option-card .panel-heading { margin-bottom: 0; }
 .option-card-intro { font-size: 13px; line-height: 1.5; }
+.security-card { border-color: rgba(243, 93, 109, .48); }
+.security-card p { font-size: 13px; line-height: 1.5; }
 .option-row { display: flex; justify-content: space-between; align-items: center; gap: 30px; background: var(--panel-soft); padding: 18px; border-radius: 8px; }
 .option-row strong { display: block; margin-bottom: 7px; }
 .option-row p { font-size: 13px; line-height: 1.5; }

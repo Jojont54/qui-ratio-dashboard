@@ -48,9 +48,9 @@ def inject_sidebar_clients():
     return {"sidebar_clients": list_torrent_clients()}
 
 
-def refresh_rows():
+def refresh_rows(require_all_clients=False):
     with _refresh_lock:
-        return _refresh_rows_locked()
+        return _refresh_rows_locked(require_all_clients)
 
 
 def cached_rows():
@@ -58,7 +58,7 @@ def cached_rows():
     return aggregate_tracker_rows(domain_rows, legacy_adjustments)
 
 
-def _refresh_rows_locked():
+def _refresh_rows_locked(require_all_clients=False):
     options = get_app_options()
     configured_clients = list_torrent_clients()
     pending_initializations = {
@@ -150,15 +150,24 @@ def _refresh_rows_locked():
                 configured_client["id"], False, error
             )
             errors.append(f"{configured_client['name']}: {error}")
-    if errors:
-        raise RuntimeError("Unable to collect all clients: " + "; ".join(errors))
     domain_to_key, trackers = load_tracker_configuration(row["domain"] for row in domain_rows)
     domain_rows, legacy_adjustments, replaced_keys, initialized_clients = apply_domain_ledger(
-        domain_rows, domain_to_key, trackers, pending_initializations, successful_clients
+        domain_rows,
+        domain_to_key,
+        trackers,
+        pending_initializations,
+        successful_clients,
+        {client["id"] for client in configured_clients if client["id"] not in successful_clients},
     )
     clear_tracker_buffers(replaced_keys)
     complete_client_initializations(initialized_clients)
-    return aggregate_tracker_rows(domain_rows, legacy_adjustments)
+    rows = aggregate_tracker_rows(domain_rows, legacy_adjustments)
+    if errors:
+        message = "Unable to collect some clients: " + "; ".join(errors)
+        app.logger.warning(message)
+        if require_all_clients:
+            raise RuntimeError(message)
+    return rows
 
 
 def refresh_periodically():
@@ -298,9 +307,21 @@ def save_tracker_settings():
     )
     if event_changed:
         try:
-            refresh_rows()
-        except Exception:
+            refresh_rows(require_all_clients=True)
+        except Exception as error:
             app.logger.exception("Unable to collect an event-change baseline")
+            return (
+                render_template(
+                    "trackers.html",
+                    trackers=list_trackers(),
+                    save_error=(
+                        "Evenement non active : impossible de relever toutes les "
+                        "sources avant son demarrage. Reessayez lorsque les clients "
+                        f"sont disponibles. ({error})"
+                    ),
+                ),
+                503,
+            )
     update_trackers(updates)
     return redirect(url_for("trackers"))
 
@@ -487,6 +508,22 @@ def sync_now():
         rows = refresh_rows()
     except Exception as error:
         return jsonify({"error": f"Synchronisation impossible : {error}"}), 400
+    failed_clients = [
+        client["name"]
+        for client in list_torrent_clients()
+        if client["last_connection_success"] is False
+    ]
+    if failed_clients:
+        return jsonify(
+            {
+                "message": (
+                    f"Synchronisation partielle : {len(rows)} tracker(s) mis a jour. "
+                    "Source(s) indisponible(s) : "
+                    + ", ".join(failed_clients)
+                    + "."
+                )
+            }
+        )
     return jsonify({"message": f"Synchronisation terminee : {len(rows)} tracker(s) mis a jour."})
 
 

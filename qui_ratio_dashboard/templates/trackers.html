@@ -9,6 +9,10 @@
   </div>
 </header>
 
+{% if save_error %}
+<div class="panel form-error">{{ save_error }}</div>
+{% endif %}
+
 <section class="panel unified-trackers">
   <form id="group-form" method="post" action="{{ url_for('group_selected_domains') }}">
     <div class="link-toolbar">

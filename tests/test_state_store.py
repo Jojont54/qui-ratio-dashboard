@@ -149,6 +149,28 @@ class DomainLedgerTests(unittest.TestCase):
         self.assertEqual(sum(row["uploaded"] for row in rows), 200)
         self.assertEqual(sum(row["downloaded"] for row in rows), 55)
 
+    def test_unavailable_client_keeps_reference_while_other_client_progresses(self):
+        first = self.client_row(1, 100, 30)
+        second = self.client_row(2, 80, 20)
+        state_store.apply_domain_ledger([first, second], {"tracker.example": "tracker"})
+
+        active = self.client_row(1, 110, 35)
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [active],
+            {"tracker.example": "tracker"},
+            unavailable_client_ids={2},
+        )
+        self.assertEqual(sum(row["uploaded"] for row in rows), 190)
+        self.assertEqual(sum(row["downloaded"] for row in rows), 55)
+        self.assertEqual(sum(row["count"] for row in rows), 2)
+
+        recovered = self.client_row(2, 85, 23)
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [self.client_row(1, 110, 35), recovered], {"tracker.example": "tracker"}
+        )
+        self.assertEqual(sum(row["uploaded"] for row in rows), 195)
+        self.assertEqual(sum(row["downloaded"] for row in rows), 58)
+
     def client_row(self, client_id, uploaded, downloaded):
         row = self.domain_row("tracker.example", uploaded, downloaded)
         row["ledger_key"] = f"client:{client_id}:tracker.example"

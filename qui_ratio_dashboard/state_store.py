@@ -159,6 +159,19 @@ def _credited_delta(value, multiplier):
     return int(round(int(value) * float(multiplier)))
 
 
+def _client_id_for_transfer(ledger_key, transfer):
+    client_id = transfer.get("client_id")
+    if client_id is not None:
+        return client_id
+    parts = str(ledger_key).split(":")
+    if len(parts) >= 3 and parts[0] == "client":
+        try:
+            return int(parts[1])
+        except ValueError:
+            return None
+    return None
+
+
 def stored_domain_rows():
     try:
         with open(_snapshot_path(), "r") as snapshot_file:
@@ -189,10 +202,16 @@ def stored_domain_rows():
 
 
 def apply_domain_ledger(
-    rows, domain_to_key, trackers=None, client_initializations=None, successful_client_ids=None
+    rows,
+    domain_to_key,
+    trackers=None,
+    client_initializations=None,
+    successful_client_ids=None,
+    unavailable_client_ids=None,
 ):
     trackers = trackers or {}
     client_initializations = client_initializations or {}
+    unavailable_client_ids = set(unavailable_client_ids or ())
     if successful_client_ids is None:
         successful_client_ids = {row.get("client_id") for row in rows}
     active_initializations = {
@@ -249,9 +268,26 @@ def apply_domain_ledger(
             domain = row["domain"]
             if ledger_key != domain and ledger_key not in transfers and domain in transfers:
                 transfers[ledger_key] = transfers.pop(domain)
+        preserved_rows = []
         for ledger_key, transfer in transfers.items():
             if ledger_key not in seen_transfers:
                 domain = transfer.get("domain", ledger_key)
+                if _client_id_for_transfer(ledger_key, transfer) in unavailable_client_ids:
+                    preserved_rows.append(
+                        {
+                            "tracker": domain,
+                            "_key": domain,
+                            "domain": domain,
+                            "ledger_key": ledger_key,
+                            "uploaded": int(transfer.get("credited_uploaded", 0)),
+                            "downloaded": int(transfer.get("credited_downloaded", 0)),
+                            "manual_buffer_uploaded": 0,
+                            "manual_buffer_downloaded": 0,
+                            "count": int(transfer.get("count", 0)),
+                            "total_size": int(transfer.get("total_size", 0)),
+                        }
+                    )
+                    continue
                 rows.append(
                     {
                         "tracker": domain,
@@ -318,6 +354,8 @@ def apply_domain_ledger(
             tracker["raw_uploaded"] = current_u
             tracker["raw_downloaded"] = current_d
             tracker["domain"] = domain
+            if row.get("client_id") is not None:
+                tracker["client_id"] = row["client_id"]
             tracker["count"] = int(row.get("count", 0))
             tracker["total_size"] = int(row.get("total_size", 0))
             transfers[ledger_key] = tracker
@@ -328,6 +366,7 @@ def apply_domain_ledger(
             row["carried_uploaded"] = tracker["credited_uploaded"] - current_u
             row["carried_downloaded"] = tracker["credited_downloaded"] - current_d
 
+        rows.extend(preserved_rows)
         state = {
             "version": STATE_VERSION,
             "transfers": transfers,

@@ -80,12 +80,21 @@ application remains accessible directly.
 The Dashboard and iFrame render the last collected snapshot immediately rather
 than waiting for torrent clients on every page load. The Options screen also
 controls collection frequency and API timeout. The
-automatic refresh is always active and runs every 60 minutes by default; both its
-activation and interval in minutes can be changed without restarting the
-container.
+automatic refresh is always active and runs every 60 minutes by default; its
+interval in minutes can be changed without restarting the container. When one
+client is temporarily unavailable, responsive clients continue to refresh and
+the unavailable client's last values are preserved until it returns.
 
 Docker only exposes port `8787` and persists `/data`; no `.env` connection
 configuration is required anymore.
+
+## Security
+
+The main application is not protected by its own login and stores torrent
+client and Prowlarr credentials in its SQLite database under `/data`. Keep it
+on a trusted local network or place it behind authenticated access before
+exposing it outside your network. The optional Homarr session check protects
+only the compact `/iframe` and `/widget` views.
 
 Unknown tracker domains discovered during collection are added automatically
 to the Trackers screen. Each display name expands to show its linked domains:
@@ -100,6 +109,8 @@ The display name, visibility and buffers are edited in the same screen and
 saved together with the global save button. Upload and download event menus
 can be used for double/triple upload, silverleech and freeleech periods.
 Event multipliers apply only to transfer progress collected after the setting
-is enabled; existing totals are not recalculated. A remaining-hours field can
-set an automatic end for each event. Once that time is reached, the event
-returns to normal on the next collection.
+is enabled; existing totals are not recalculated. Enabling an event first
+requires a successful reference collection from every configured client, so
+uncollected earlier traffic is not mistakenly multiplied. A remaining-hours
+field can set an automatic end for each event. Once that time is reached, the
+event returns to normal on the next collection.
