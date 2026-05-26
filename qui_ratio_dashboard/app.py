@@ -11,21 +11,26 @@ from .database import (
     complete_client_initializations,
     delete_torrent_client,
     get_app_options,
+    get_torrent_rules,
     get_torrent_client,
     group_domains,
     init_database,
     list_torrent_clients,
     list_trackers,
     load_tracker_configuration,
+    save_torrent_rules,
     unlink_domains,
     update_app_options,
     update_torrent_client,
+    update_torrent_client_connection_status,
     update_trackers,
 )
 from .direct_clients import configured_client as build_torrent_client
+from .collector import recent_torrent_hashes, torrent_rows
+from .prowlarr_client import ProwlarrClient
 from .qui_client import QuiClient
 from .formatters import aggregate_tracker_rows, compute_domain_rows, fmt_bytes
-from .state_store import apply_domain_ledger
+from .state_store import apply_domain_ledger, stored_domain_rows
 from .config import (
     PORT,
 )
@@ -38,9 +43,19 @@ _refresh_wake = Event()
 _refresh_lock = Lock()
 
 
+@app.context_processor
+def inject_sidebar_clients():
+    return {"sidebar_clients": list_torrent_clients()}
+
+
 def refresh_rows():
     with _refresh_lock:
         return _refresh_rows_locked()
+
+
+def cached_rows():
+    domain_rows, legacy_adjustments = stored_domain_rows()
+    return aggregate_tracker_rows(domain_rows, legacy_adjustments)
 
 
 def _refresh_rows_locked():
@@ -57,13 +72,83 @@ def _refresh_rows_locked():
     for configured_client in configured_clients:
         try:
             client = build_torrent_client(configured_client, options["http_timeout_seconds"])
-            client_rows = compute_domain_rows(client.fetch_torrents_summary())
+            if configured_client["client_type"] == "QUI":
+                payload = client.fetch_torrents_summary()
+                client_rows = compute_domain_rows(payload)
+                for row in client_rows:
+                    row["ledger_key"] = f"client:{configured_client['id']}:{row['domain']}"
+            else:
+                transfers = client.fetch_torrents()
+                hashes = [
+                    str(transfer.get("hash", "")).strip().lower()
+                    for transfer in transfers
+                    if str(transfer.get("hash", "")).strip()
+                ]
+                rules = get_torrent_rules(configured_client["id"], hashes)
+                missing = sorted({torrent_hash for torrent_hash in hashes if torrent_hash not in rules})
+                new_rules = {
+                    torrent_hash: {
+                        "upload_multiplier": 1,
+                        "download_multiplier": 1,
+                        "label": "Normal",
+                        "source": "detected",
+                    }
+                    for torrent_hash in missing
+                }
+                prowlarr_checks = []
+                if options["prowlarr_enabled"]:
+                    recent_hashes = recent_torrent_hashes(
+                        transfers, options["refresh_interval_seconds"]
+                    )
+                    prowlarr_checks = sorted(
+                        (set(missing) & recent_hashes)
+                        | {
+                            torrent_hash
+                            for torrent_hash, rule in rules.items()
+                            if rule["source"] == "prowlarr-miss"
+                            and rule.get("lookup_attempts", 1) < 3
+                            and torrent_hash in recent_hashes
+                        }
+                    )
+                if prowlarr_checks and options["prowlarr_enabled"]:
+                    prowlarr = ProwlarrClient(
+                        options["prowlarr_base_url"],
+                        options["prowlarr_api_key"],
+                        options["http_timeout_seconds"],
+                    )
+                    new_rules.update(prowlarr.torrent_rules(prowlarr_checks))
+                rules_to_save = []
+                for transfer in transfers:
+                    torrent_hash = str(transfer.get("hash", "")).strip().lower()
+                    if torrent_hash in new_rules:
+                        rules_to_save.append(
+                            (
+                                torrent_hash,
+                                transfer.get("tracker", ""),
+                                new_rules[torrent_hash],
+                            )
+                        )
+                save_torrent_rules(configured_client["id"], rules_to_save)
+                rules.update(new_rules)
+                client_rows = torrent_rows(transfers, rules)
+                for row in client_rows:
+                    row["previous_ledger_key"] = (
+                        f"client:{configured_client['id']}:{row['domain']}"
+                    )
+                    row["ledger_key"] = (
+                        f"client:{configured_client['id']}:torrent:{row['hash']}"
+                        if row["hash"]
+                        else f"client:{configured_client['id']}:{row['domain']}"
+                    )
             for row in client_rows:
-                row["ledger_key"] = f"client:{configured_client['id']}:{row['domain']}"
                 row["client_id"] = configured_client["id"]
             domain_rows.extend(client_rows)
             successful_clients.add(configured_client["id"])
+            update_torrent_client_connection_status(configured_client["id"], True)
         except Exception as error:
+            update_torrent_client_connection_status(
+                configured_client["id"], False, error
+            )
             errors.append(f"{configured_client['name']}: {error}")
     if errors:
         raise RuntimeError("Unable to collect all clients: " + "; ".join(errors))
@@ -79,15 +164,11 @@ def _refresh_rows_locked():
 def refresh_periodically():
     while not _refresh_stop.is_set():
         options = get_app_options()
-        if options["background_refresh_enabled"]:
-            try:
-                refresh_rows()
-            except Exception:
-                app.logger.exception("Background ratio refresh failed")
-            wait_seconds = options["refresh_interval_seconds"]
-        else:
-            wait_seconds = None
-        _refresh_wake.wait(wait_seconds)
+        try:
+            refresh_rows()
+        except Exception:
+            app.logger.exception("Background ratio refresh failed")
+        _refresh_wake.wait(options["refresh_interval_seconds"])
         _refresh_wake.clear()
 
 
@@ -137,7 +218,7 @@ def health():
 
 @app.get("/api/ratios")
 def api_ratios():
-    rows = refresh_rows()
+    rows = cached_rows()
     out = []
     for r in rows:
         rr = dict(r)
@@ -155,7 +236,7 @@ def iframe():
         abort(404)
     if options["homarr_auth_enabled"] and not homarr_session_ok(options):
         abort(401)
-    rows = refresh_rows()
+    rows = cached_rows()
     rows = [row for row in rows if row.get("widget_visible", True)]
     return render_template("widget.html", rows=rows, fmt_bytes=fmt_bytes, infinity=math.inf)
 
@@ -163,7 +244,7 @@ def iframe():
 @app.get("/app/")
 @app.get("/")
 def dashboard():
-    rows = refresh_rows()
+    rows = cached_rows()
     rows = [row for row in rows if row.get("dashboard_visible", True)]
     return render_template(
         "dashboard.html",
@@ -177,10 +258,6 @@ def dashboard():
 @app.get("/app/trackers")
 @app.get("/trackers")
 def trackers():
-    try:
-        refresh_rows()
-    except Exception:
-        app.logger.exception("Unable to discover tracker domains for management view")
     return render_template(
         "trackers.html",
         trackers=list_trackers(),
@@ -310,20 +387,27 @@ def _form_client_configuration():
 @app.post("/clients/test")
 def test_torrent_client_connection():
     configuration = _form_client_configuration()
+    client_id = request.form.get("client_id", "").strip()
     if not request.form.get("address", "").strip():
         return jsonify({"error": "Adresse requise."}), 400
     try:
         client = build_torrent_client(configuration, get_app_options()["http_timeout_seconds"])
         if configuration["client_type"].upper() == "QUI":
             instances = client.list_instances()
+            if client_id.isdigit():
+                update_torrent_client_connection_status(int(client_id), True)
             return jsonify({"message": f"{len(instances)} instance(s) QUI disponible(s)."})
         payload = client.fetch_torrents_summary()
         transfers = payload.get("counts", {}).get("trackerTransfers", {})
         count = sum(int(transfer.get("count", 0)) for transfer in transfers.values())
+        if client_id.isdigit():
+            update_torrent_client_connection_status(int(client_id), True)
         return jsonify(
             {"message": f"Connexion reussie : {count} torrent(s), {len(transfers)} tracker(s)."}
         )
     except Exception as error:
+        if client_id.isdigit():
+            update_torrent_client_connection_status(int(client_id), False, error)
         return jsonify({"error": f"Connexion impossible : {error}"}), 400
 
 
@@ -348,7 +432,11 @@ def discover_qui_instances():
             base_url, api_key, "1", get_app_options()["http_timeout_seconds"]
         ).list_instances()
     except Exception as error:
+        if client_id.isdigit():
+            update_torrent_client_connection_status(int(client_id), False, error)
         return jsonify({"error": f"Connexion QUI impossible : {error}"}), 400
+    if client_id.isdigit():
+        update_torrent_client_connection_status(int(client_id), True)
     return jsonify({"instances": instances})
 
 
@@ -359,17 +447,47 @@ def options():
 
 @app.post("/options")
 def save_options():
+    current_options = get_app_options()
+    prowlarr_api_key = request.form.get("prowlarr_api_key", "").strip()
+    if not prowlarr_api_key:
+        prowlarr_api_key = current_options["prowlarr_api_key"]
     update_app_options(
         request.form.get("iframe_enabled") == "on",
         request.form.get("homarr_auth_enabled") == "on",
         request.form.get("homarr_base_url", ""),
         request.form.get("homarr_session_endpoint", "/api/auth/session"),
-        request.form.get("background_refresh_enabled") == "on",
         request.form.get("refresh_interval_minutes", "60"),
         request.form.get("http_timeout_seconds", "10"),
+        request.form.get("prowlarr_enabled") == "on",
+        request.form.get("prowlarr_base_url", ""),
+        prowlarr_api_key,
     )
     _refresh_wake.set()
     return redirect(url_for("options"))
+
+
+@app.post("/options/prowlarr/test")
+def test_prowlarr_connection():
+    current_options = get_app_options()
+    api_key = request.form.get("prowlarr_api_key", "").strip() or current_options["prowlarr_api_key"]
+    try:
+        ProwlarrClient(
+            request.form.get("prowlarr_base_url", ""),
+            api_key,
+            current_options["http_timeout_seconds"],
+        ).test_connection()
+    except Exception as error:
+        return jsonify({"error": f"Connexion Prowlarr impossible : {error}"}), 400
+    return jsonify({"message": "Connexion Prowlarr reussie."})
+
+
+@app.post("/options/sync")
+def sync_now():
+    try:
+        rows = refresh_rows()
+    except Exception as error:
+        return jsonify({"error": f"Synchronisation impossible : {error}"}), 400
+    return jsonify({"message": f"Synchronisation terminee : {len(rows)} tracker(s) mis a jour."})
 
 
 start_background_refresh()

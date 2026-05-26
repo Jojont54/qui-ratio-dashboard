@@ -9,76 +9,153 @@
   </div>
 </header>
 
-<section class="panel options-panel">
-  <div class="panel-heading">
-    <h2>Integration</h2>
-  </div>
+<section class="options-panel">
   <form class="options-form" method="post" action="{{ url_for('save_options') }}">
-    <div class="option-row">
-      <div>
-        <strong>iFrame Homarr</strong>
-        <p>Autorise l'affichage compact via <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
+    <article class="panel option-card">
+      <div class="panel-heading">
+        <h2>iFrame / Homarr</h2>
       </div>
-      <label class="switch" aria-label="Activer iFrame">
-        <input type="checkbox" name="iframe_enabled" {% if options.iframe_enabled %}checked{% endif %}>
-        <span class="switch-slider"></span>
-      </label>
-    </div>
-    <div class="option-state">
-      Etat actuel :
-      <strong class="{% if options.iframe_enabled %}enabled{% else %}disabled{% endif %}">
-        {% if options.iframe_enabled %}Activee{% else %}Desactivee{% endif %}
-      </strong>
-    </div>
-    <div class="option-row homarr-auth-row">
-      <div>
-        <strong>Authentification Homarr</strong>
-        <p>Verifie la session Homarr uniquement avant d'afficher l'iFrame.</p>
+      <div class="option-row">
+        <div>
+          <strong>iFrame Homarr</strong>
+          <p>Autorise l'affichage compact via <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
+        </div>
+        <label class="switch" aria-label="Activer iFrame">
+          <input type="checkbox" name="iframe_enabled" {% if options.iframe_enabled %}checked{% endif %}>
+          <span class="switch-slider"></span>
+        </label>
       </div>
-      <label class="switch" aria-label="Activer l'authentification Homarr">
-        <input type="checkbox" name="homarr_auth_enabled" {% if options.homarr_auth_enabled %}checked{% endif %}>
-        <span class="switch-slider"></span>
-      </label>
-    </div>
-    <div class="homarr-settings">
-      <label>
-        Adresse Homarr
-        <input name="homarr_base_url" value="{{ options.homarr_base_url }}" placeholder="https://homarr.exemple.fr">
-      </label>
-      <label>
-        Chemin de session
-        <input name="homarr_session_endpoint" value="{{ options.homarr_session_endpoint }}" placeholder="/api/auth/session">
-      </label>
-      <p class="option-help">Activez uniquement apres avoir verifie l'adresse Homarr : une session Homarr valide sera requise pour afficher <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
-    </div>
-    <div class="options-divider"></div>
-    <div class="panel-heading option-heading">
-      <h2>Collecte</h2>
-    </div>
-    <div class="option-row">
-      <div>
-        <strong>Rafraichissement automatique</strong>
-        <p>Collecte les statistiques en arriere-plan, meme lorsque le dashboard n'est pas ouvert.</p>
+      <div class="option-state">
+        Etat actuel :
+        <strong class="{% if options.iframe_enabled %}enabled{% else %}disabled{% endif %}">
+          {% if options.iframe_enabled %}Activee{% else %}Desactivee{% endif %}
+        </strong>
       </div>
-      <label class="switch" aria-label="Activer le rafraichissement automatique">
-        <input type="checkbox" name="background_refresh_enabled" {% if options.background_refresh_enabled %}checked{% endif %}>
-        <span class="switch-slider"></span>
-      </label>
-    </div>
-    <div class="runtime-settings">
-      <label>
-        Frequence de rafraichissement (minutes)
-        <input type="number" name="refresh_interval_minutes" min="1" step="1" value="{{ options.refresh_interval_minutes }}" required>
-      </label>
-      <label>
-        Delai maximum des API (secondes)
-        <input type="number" name="http_timeout_seconds" min="1" step="1" value="{{ options.http_timeout_seconds }}" required>
-      </label>
-      <p class="option-help">La frequence minimale acceptee est d'une minute. Le changement est applique des la sauvegarde.</p>
-    </div>
+      <div class="option-row homarr-auth-row">
+        <div>
+          <strong>Authentification Homarr</strong>
+          <p>Verifie la session Homarr uniquement avant d'afficher l'iFrame.</p>
+        </div>
+        <label class="switch" aria-label="Activer l'authentification Homarr">
+          <input type="checkbox" name="homarr_auth_enabled" {% if options.homarr_auth_enabled %}checked{% endif %}>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="homarr-settings">
+        <label>
+          Adresse Homarr
+          <input name="homarr_base_url" value="{{ options.homarr_base_url }}" placeholder="https://homarr.exemple.fr">
+        </label>
+        <label>
+          Chemin de session
+          <input name="homarr_session_endpoint" value="{{ options.homarr_session_endpoint }}" placeholder="/api/auth/session">
+        </label>
+        <p class="option-help">Activez uniquement apres avoir verifie l'adresse Homarr : une session Homarr valide sera requise pour afficher <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
+      </div>
+    </article>
+    <article class="panel option-card">
+      <div class="panel-heading">
+        <h2>Prowlarr</h2>
+      </div>
+      <div class="option-row">
+        <div>
+          <strong>Detection automatique des evenements</strong>
+          <p>A l'apparition d'un nouveau torrent, consulte l'historique Prowlarr pour detecter freeleech, silverleech ou double upload.</p>
+        </div>
+        <label class="switch" aria-label="Activer Prowlarr">
+          <input type="checkbox" name="prowlarr_enabled" {% if options.prowlarr_enabled %}checked{% endif %}>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="homarr-settings">
+        <label>
+          Adresse Prowlarr
+          <input name="prowlarr_base_url" value="{{ options.prowlarr_base_url }}" placeholder="http://prowlarr:9696">
+        </label>
+        <label>
+          Cle API Prowlarr
+          <input type="password" name="prowlarr_api_key" placeholder="{% if options.prowlarr_api_key_hint %}Conservee : {{ options.prowlarr_api_key_hint }}{% else %}Cle API{% endif %}" autocomplete="off">
+        </label>
+        <div class="instance-discovery">
+          <button class="button secondary" id="test-prowlarr" type="button">Tester la connexion</button>
+          <span class="instance-status" id="prowlarr-status">Verifiez les parametres avant de sauver.</span>
+        </div>
+        <p class="option-help">Incompatible avec QUI : QUI transmet deja des totaux groupes sans hash de torrent. Pour qBittorrent, Transmission et Deluge, seuls les torrents ajoutes depuis le dernier intervalle de collecte sont verifies. Avec rTorrent, la date d'ajout n'etant pas fiable, Prowlarr est interroge uniquement lorsqu'un torrent apparait pour la premiere fois dans l'application. Dans tous les cas, le grab doit etre present dans l'historique Prowlarr.</p>
+      </div>
+    </article>
+    <article class="panel option-card">
+      <div class="panel-heading">
+        <h2>Collecte</h2>
+      </div>
+      <p class="option-card-intro">La collecte automatique est toujours active, meme lorsque le dashboard n'est pas ouvert.</p>
+      <div class="runtime-settings">
+        <label>
+          Frequence de rafraichissement (minutes)
+          <input type="number" name="refresh_interval_minutes" min="1" step="1" value="{{ options.refresh_interval_minutes }}" required>
+        </label>
+        <label>
+          Delai maximum des API (secondes)
+          <input type="number" name="http_timeout_seconds" min="1" step="1" value="{{ options.http_timeout_seconds }}" required>
+        </label>
+        <p class="option-help">La frequence minimale acceptee est d'une minute. Le changement est applique des la sauvegarde.</p>
+      </div>
+      <div class="sync-action">
+        <button class="button secondary sync-button" id="sync-now" type="button">
+          <span class="sync-spinner" aria-hidden="true"></span>
+          <span id="sync-label">Synchroniser maintenant</span>
+        </button>
+        <span class="instance-status" id="sync-status">Utilise les reglages actuellement sauvegardes.</span>
+      </div>
+    </article>
     <div class="global-save">
       <button class="button" type="submit">Sauver les options</button>
     </div>
   </form>
 </section>
+<script>
+  (() => {
+    const form = document.querySelector(".options-form");
+    const button = document.getElementById("test-prowlarr");
+    const status = document.getElementById("prowlarr-status");
+    button.addEventListener("click", async () => {
+      status.textContent = "Test de connexion...";
+      try {
+        const response = await fetch("{{ url_for('test_prowlarr_connection') }}", {
+          method: "POST",
+          body: new FormData(form),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Connexion impossible.");
+        }
+        status.textContent = payload.message;
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+    const syncButton = document.getElementById("sync-now");
+    const syncLabel = document.getElementById("sync-label");
+    const syncStatus = document.getElementById("sync-status");
+    syncButton.addEventListener("click", async () => {
+      syncButton.disabled = true;
+      syncButton.classList.add("is-syncing");
+      syncLabel.textContent = "Synchronisation...";
+      syncStatus.textContent = "Collecte des donnees en cours.";
+      try {
+        const response = await fetch("{{ url_for('sync_now') }}", { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Synchronisation impossible.");
+        }
+        syncStatus.textContent = payload.message;
+      } catch (error) {
+        syncStatus.textContent = error.message;
+      } finally {
+        syncButton.disabled = false;
+        syncButton.classList.remove("is-syncing");
+        syncLabel.textContent = "Synchroniser maintenant";
+      }
+    });
+  })();
+</script>
 {% endblock %}

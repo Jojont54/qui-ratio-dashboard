@@ -149,6 +149,58 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("new.tracker.example", config)
         self.assertEqual(database.list_trackers()[0]["domains"], ["new.tracker.example"])
 
+    def test_detected_parent_domain_and_its_subdomain_are_automatically_grouped(self):
+        database.load_tracker_configuration(["tracker.abn.lol", "abn.lol"])
+
+        trackers = database.list_trackers()
+        self.assertEqual(len(trackers), 1)
+        self.assertEqual(trackers[0]["display_name"], "abn.lol")
+        self.assertEqual(trackers[0]["domains"], ["abn.lol", "tracker.abn.lol"])
+
+    def test_detected_subdomain_joins_an_existing_named_parent_tracker(self):
+        database.load_tracker_configuration(["abn.lol"])
+        database.group_domains(["abn.lol"], "ABN")
+
+        database.load_tracker_configuration(["tracker.abn.lol"])
+
+        trackers = database.list_trackers()
+        self.assertEqual(len(trackers), 1)
+        self.assertEqual(trackers[0]["display_name"], "ABN")
+        self.assertEqual(trackers[0]["domains"], ["abn.lol", "tracker.abn.lol"])
+
+    def test_manually_unlinked_related_domains_are_not_linked_again(self):
+        database.load_tracker_configuration(["tracker.abn.lol", "abn.lol"])
+        database.unlink_domains(["tracker.abn.lol"])
+
+        database.load_tracker_configuration(["tracker.abn.lol", "abn.lol"])
+
+        trackers = database.list_trackers()
+        self.assertEqual(len(trackers), 2)
+
+    def test_existing_related_domains_are_grouped_once_during_upgrade(self):
+        database.init_database()
+        with database._database() as connection:
+            connection.execute(
+                "DELETE FROM app_metadata WHERE key = ?",
+                (database._AUTO_PARENT_DOMAIN_GROUPING_KEY,),
+            )
+            for domain in ("abn.lol", "tracker.abn.lol"):
+                connection.execute(
+                    "INSERT INTO trackers (key, display_name) VALUES (?, ?)",
+                    (domain, domain),
+                )
+                connection.execute(
+                    "INSERT INTO tracker_domains (domain, tracker_key) VALUES (?, ?)",
+                    (domain, domain),
+                )
+
+        database.init_database()
+        self.assertEqual(len(database.list_trackers()), 1)
+
+        database.unlink_domains(["tracker.abn.lol"])
+        database.init_database()
+        self.assertEqual(len(database.list_trackers()), 2)
+
     def test_selected_domains_can_be_grouped_and_empty_discovered_entries_removed(self):
         database.load_tracker_configuration(["one.example", "two.example"])
 
@@ -406,6 +458,23 @@ class DatabaseTests(unittest.TestCase):
         database.delete_torrent_client(client_id)
         self.assertEqual(database.list_torrent_clients(), [])
 
+    def test_client_connection_status_records_last_result(self):
+        client_id = database.add_torrent_client(
+            "Seedbox", "https://qui.example", "7476", "abcdef1234", "3"
+        )
+        self.assertIsNone(database.list_torrent_clients()[0]["last_connection_success"])
+
+        database.update_torrent_client_connection_status(client_id, False, "Timeout")
+        failed = database.list_torrent_clients()[0]
+        self.assertFalse(failed["last_connection_success"])
+        self.assertEqual(failed["last_connection_error"], "Timeout")
+        self.assertTrue(failed["last_connection_at"])
+
+        database.update_torrent_client_connection_status(client_id, True)
+        recovered = database.list_torrent_clients()[0]
+        self.assertTrue(recovered["last_connection_success"])
+        self.assertEqual(recovered["last_connection_error"], "")
+
     def test_qui_client_can_be_edited_without_retyping_api_key(self):
         database.init_database()
         client_id = database.add_torrent_client(
@@ -487,7 +556,6 @@ class DatabaseTests(unittest.TestCase):
 
         defaults = database.get_app_options()
         self.assertTrue(defaults["iframe_enabled"])
-        self.assertTrue(defaults["background_refresh_enabled"])
         self.assertEqual(defaults["refresh_interval_seconds"], 3600)
         self.assertEqual(defaults["http_timeout_seconds"], 10)
 
@@ -509,6 +577,87 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(options["homarr_base_url"], "https://homarr.example")
         self.assertEqual(options["homarr_session_endpoint"], "/api/auth/session")
 
+    def test_prowlarr_options_and_torrent_rules_are_stored(self):
+        database.init_database()
+        client_id = database.add_torrent_client(
+            "Transmission", "http://transmission", "", "", "", "replace", "TRANSMISSION"
+        )
+        database.update_app_options(
+            True,
+            prowlarr_enabled=True,
+            prowlarr_base_url="http://prowlarr:9696/",
+            prowlarr_api_key="secret",
+        )
+        database.save_torrent_rule(
+            client_id,
+            "ABCDEF",
+            "tracker.example",
+            {
+                "upload_multiplier": 2,
+                "download_multiplier": 0,
+                "label": "Upload x2 + Freeleech",
+                "source": "prowlarr",
+            },
+        )
+
+        options = database.get_app_options()
+        rules = database.get_torrent_rules(client_id, ["abcdef"])
+        self.assertTrue(options["prowlarr_enabled"])
+        self.assertEqual(options["prowlarr_base_url"], "http://prowlarr:9696")
+        self.assertEqual(options["prowlarr_api_key"], "secret")
+        self.assertEqual(rules["abcdef"]["download_multiplier"], 0)
+        self.assertEqual(rules["abcdef"]["upload_multiplier"], 2)
+
+    def test_prowlarr_miss_can_be_replaced_when_history_arrives_later(self):
+        client_id = database.add_torrent_client(
+            "Deluge", "http://deluge", "", "", "", "replace", "DELUGE"
+        )
+        database.save_torrent_rule(
+            client_id,
+            "abc",
+            "tracker.example",
+            {"label": "Non trouve dans Prowlarr", "source": "prowlarr-miss"},
+        )
+        database.save_torrent_rule(
+            client_id,
+            "abc",
+            "tracker.example",
+            {
+                "download_multiplier": 0,
+                "label": "Freeleech",
+                "source": "prowlarr",
+            },
+        )
+
+        rule = database.get_torrent_rules(client_id, ["abc"])["abc"]
+        self.assertEqual(rule["download_multiplier"], 0)
+        self.assertEqual(rule["source"], "prowlarr")
+        self.assertEqual(rule["lookup_attempts"], 2)
+
+    def test_many_detected_torrent_rules_can_be_saved_in_one_collection(self):
+        client_id = database.add_torrent_client(
+            "qBittorrent", "http://qbit", "", "", "", "replace", "QBITTORRENT"
+        )
+        rules = [
+            (
+                f"hash-{index}",
+                "tracker.example",
+                {
+                    "upload_multiplier": 1,
+                    "download_multiplier": 1,
+                    "label": "Normal",
+                    "source": "detected",
+                },
+            )
+            for index in range(2000)
+        ]
+
+        database.save_torrent_rules(client_id, rules)
+
+        stored = database.get_torrent_rules(client_id, ["hash-0", "hash-1999"])
+        self.assertEqual(set(stored), {"hash-0", "hash-1999"})
+        self.assertEqual(stored["hash-1999"]["source"], "detected")
+
     def test_collection_options_are_stored_in_the_interface_settings(self):
         database.init_database()
 
@@ -517,16 +666,30 @@ class DatabaseTests(unittest.TestCase):
             False,
             "",
             "/api/auth/session",
-            False,
             "30",
             "25",
         )
 
         options = database.get_app_options()
-        self.assertFalse(options["background_refresh_enabled"])
         self.assertEqual(options["refresh_interval_seconds"], 1800)
         self.assertEqual(options["refresh_interval_minutes"], 30)
         self.assertEqual(options["http_timeout_seconds"], 25)
+
+    def test_obsolete_background_refresh_toggle_is_removed(self):
+        database.init_database()
+        with database._database() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                ("background_refresh_enabled", "0"),
+            )
+
+        database.init_database()
+
+        with database._database() as connection:
+            stored = connection.execute(
+                "SELECT value FROM app_metadata WHERE key = 'background_refresh_enabled'"
+            ).fetchone()
+        self.assertIsNone(stored)
 
     def test_invalid_stored_collection_options_fall_back_to_defaults(self):
         database.init_database()

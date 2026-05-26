@@ -50,6 +50,42 @@ class DomainLedgerTests(unittest.TestCase):
         self.assertEqual(rows[0]["uploaded"], 120)
         self.assertEqual(rows[0]["downloaded"], 60)
 
+    def test_stored_rows_can_render_dashboard_without_a_new_collection(self):
+        active = self.domain_row("tracker.example", 100, 50)
+        active["count"] = 3
+        active["total_size"] = 900
+        self.apply([active])
+
+        rows, adjustments = state_store.stored_domain_rows()
+
+        self.assertEqual(adjustments, {})
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
+        self.assertEqual(rows[0]["count"], 3)
+        self.assertEqual(rows[0]["total_size"], 900)
+
+        self.apply([])
+        rows, _ = state_store.stored_domain_rows()
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
+        self.assertEqual(rows[0]["count"], 0)
+        self.assertEqual(rows[0]["total_size"], 0)
+
+    def test_display_snapshot_is_compact_when_ledger_contains_many_torrents(self):
+        rows = []
+        for index in range(100):
+            row = self.domain_row("tracker.example", 10, 5)
+            row["ledger_key"] = f"client:1:torrent:{index}"
+            rows.append(row)
+        self.apply(rows)
+
+        cached, _ = state_store.stored_domain_rows()
+
+        self.assertEqual(len(cached), 1)
+        self.assertEqual(cached[0]["uploaded"], 1000)
+        self.assertEqual(cached[0]["downloaded"], 500)
+        self.assertTrue(os.path.exists(state_store.STATE_PATH + ".snapshot"))
+
     def test_previous_tracker_state_becomes_a_legacy_adjustment(self):
         with open(state_store.STATE_PATH, "w", encoding="utf-8") as state_file:
             json.dump(

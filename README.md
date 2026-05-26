@@ -59,9 +59,14 @@ current totals. This choice is required for a new connection so a first client
 is not mistaken for a repaired connection.
 
 The direct-client collector operates per torrent before grouping totals by
-tracker. It already accepts upload/download factors per torrent, so a future
-Prowlarr, Sonarr or Radarr integration can mark a hash as freeleech,
-silverleech or double upload without rewriting the dashboard aggregation.
+tracker. Optional Prowlarr settings in Options inspect newly detected torrent
+hashes in Prowlarr history and retain freeleech, silverleech or double-upload
+factors before aggregation. For qBittorrent, Transmission and Deluge, only
+torrents added during the configured collection interval are checked, so an
+existing library is not searched on a rebuild. rTorrent has no standard,
+reliable added-at value in this integration and is checked on first detection.
+This cannot work with QUI connections because QUI only supplies totals already
+grouped by tracker, without torrent hashes.
 
 The Options screen can disable the compact iFrame globally. When disabled,
 `/iframe` and its compatibility alias `/widget` are unavailable, while saved
@@ -72,8 +77,10 @@ the Homarr address and its session endpoint, then save. Once enabled, a valid
 Homarr session is required only to display `/iframe` or `/widget`; the main
 application remains accessible directly.
 
-The Options screen also controls background collection and API timeout. The
-automatic refresh is enabled by default and runs every 60 minutes; both its
+The Dashboard and iFrame render the last collected snapshot immediately rather
+than waiting for torrent clients on every page load. The Options screen also
+controls collection frequency and API timeout. The
+automatic refresh is always active and runs every 60 minutes by default; both its
 activation and interval in minutes can be changed without restarting the
 container.
 
@@ -86,6 +93,9 @@ select domains and use the link button to join them under one name, or the
 unlink button to return them to individual trackers. The Dashboard and Homarr
 widget show one consolidated row per name. Select all domains of an existing
 group and link them to a new name to rename it while keeping its buffers.
+When both a tracker domain and one of its subdomains are detected, such as
+`abn.lol` and `tracker.abn.lol`, they are automatically linked on discovery;
+an explicit unlink remains separate afterwards.
 The display name, visibility and buffers are edited in the same screen and
 saved together with the global save button. Upload and download event menus
 can be used for double/triple upload, silverleech and freeleech periods.

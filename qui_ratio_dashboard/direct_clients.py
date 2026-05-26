@@ -27,7 +27,7 @@ class QBittorrentClient:
         self.password = str(password)
         self.timeout = float(timeout)
 
-    def fetch_torrents_summary(self):
+    def fetch_torrents(self):
         session = requests.Session()
         if self.username or self.password:
             response = session.post(
@@ -40,17 +40,20 @@ class QBittorrentClient:
                 raise RuntimeError("Authentification qBittorrent refusee")
         response = session.get(f"{self.base_url}/api/v2/torrents/info", timeout=self.timeout)
         response.raise_for_status()
-        transfers = [
+        return [
             {
                 "hash": torrent.get("hash", ""),
                 "tracker": torrent.get("tracker", ""),
                 "uploaded": torrent.get("uploaded", 0),
                 "downloaded": torrent.get("downloaded", 0),
                 "total_size": torrent.get("total_size", torrent.get("size", 0)),
+                "added_at": torrent.get("added_on"),
             }
             for torrent in response.json()
         ]
-        return torrent_summary(transfers)
+
+    def fetch_torrents_summary(self, rules_by_hash=None):
+        return torrent_summary(self.fetch_torrents(), rules_by_hash)
 
 
 class TransmissionClient:
@@ -76,7 +79,7 @@ class TransmissionClient:
         response.raise_for_status()
         return response.json()
 
-    def fetch_torrents_summary(self):
+    def fetch_torrents(self):
         data = self._post(
             {
                 "method": "torrent-get",
@@ -86,6 +89,7 @@ class TransmissionClient:
                         "uploadedEver",
                         "downloadedEver",
                         "totalSize",
+                        "addedDate",
                         "trackers",
                     ]
                 },
@@ -102,9 +106,13 @@ class TransmissionClient:
                         "downloadedEver", torrent.get("downloaded_ever", 0)
                     ),
                     "total_size": torrent.get("totalSize", torrent.get("total_size", 0)),
+                    "added_at": torrent.get("addedDate", torrent.get("added_date")),
                 }
             )
-        return torrent_summary(transfers)
+        return transfers
+
+    def fetch_torrents_summary(self, rules_by_hash=None):
+        return torrent_summary(self.fetch_torrents(), rules_by_hash)
 
 
 class DelugeClient:
@@ -129,7 +137,7 @@ class DelugeClient:
             raise RuntimeError(str(result["error"]))
         return result.get("result")
 
-    def fetch_torrents_summary(self):
+    def fetch_torrents(self):
         if not self._call("auth.login", [self.password]):
             raise RuntimeError("Authentification Deluge refusee")
         if not self._call("web.connected"):
@@ -138,19 +146,33 @@ class DelugeClient:
             self._call("web.connect", [self.daemon_id])
         data = self._call(
             "core.get_torrents_status",
-            [{}, ["hash", "tracker", "tracker_host", "total_uploaded", "total_done", "total_size"]],
+            [
+                {},
+                [
+                    "hash",
+                    "tracker",
+                    "tracker_host",
+                    "total_uploaded",
+                    "total_done",
+                    "total_size",
+                    "time_added",
+                ],
+            ],
         ) or {}
-        transfers = [
+        return [
             {
                 "hash": status.get("hash", torrent_hash),
                 "tracker": status.get("tracker_host") or status.get("tracker", ""),
                 "uploaded": status.get("total_uploaded", 0),
                 "downloaded": status.get("total_done", 0),
                 "total_size": status.get("total_size", 0),
+                "added_at": status.get("time_added"),
             }
             for torrent_hash, status in data.items()
         ]
-        return torrent_summary(transfers)
+
+    def fetch_torrents_summary(self, rules_by_hash=None):
+        return torrent_summary(self.fetch_torrents(), rules_by_hash)
 
 
 class RTorrentClient:
@@ -161,9 +183,14 @@ class RTorrentClient:
             parsed = parsed._replace(netloc=credentials + parsed.netloc)
         self.server = ServerProxy(urlunsplit(parsed), allow_none=True)
 
-    def fetch_torrents_summary(self):
+    def fetch_torrents(self):
         rows = getattr(self.server, "d.multicall2")(
-            "", "main", "d.hash=", "d.up.total=", "d.down.total=", "d.size_bytes="
+            "",
+            "main",
+            "d.hash=",
+            "d.up.total=",
+            "d.down.total=",
+            "d.size_bytes=",
         )
         transfers = []
         for torrent_hash, uploaded, downloaded, total_size in rows:
@@ -177,7 +204,10 @@ class RTorrentClient:
                     "total_size": total_size,
                 }
             )
-        return torrent_summary(transfers)
+        return transfers
+
+    def fetch_torrents_summary(self, rules_by_hash=None):
+        return torrent_summary(self.fetch_torrents(), rules_by_hash)
 
 
 def configured_client(configuration, timeout):

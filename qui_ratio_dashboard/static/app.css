@@ -28,8 +28,12 @@ p, .muted { color: var(--muted); }
 .navigation { display: grid; gap: 5px; }
 .navigation a { color: var(--muted); padding: 11px 12px; border-radius: 7px; text-decoration: none; }
 .navigation a.active, .navigation a:hover { color: var(--text); background: var(--panel-soft); }
-.sidebar-note { position: absolute; left: 26px; bottom: 28px; color: var(--muted); font-size: 13px; line-height: 1.8; }
-.sidebar-note strong { color: var(--green); }
+.sidebar-note { position: absolute; left: 26px; right: 20px; bottom: 28px; color: var(--muted); font-size: 13px; display: grid; gap: 9px; }
+.sidebar-note-title { margin-bottom: 2px; }
+.sidebar-source { display: grid; gap: 1px; }
+.sidebar-source strong { color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-source.failed strong { color: var(--red); }
+.sidebar-source span, .sidebar-empty { color: var(--muted); font-size: 11px; }
 .content { width: 100%; margin-left: 224px; padding: 34px; }
 .page-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 28px; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 20px; }
@@ -114,8 +118,11 @@ p, .muted { color: var(--muted); }
 .radio-option input { width: auto; margin-top: 3px; }
 .radio-option span { display: grid; gap: 3px; font-size: 13px; }
 .radio-option small { color: var(--muted); line-height: 1.35; }
-.options-panel { max-width: 720px; }
+.options-panel { max-width: 760px; }
 .options-form { display: grid; gap: 18px; }
+.option-card { display: grid; gap: 18px; }
+.option-card .panel-heading { margin-bottom: 0; }
+.option-card-intro { font-size: 13px; line-height: 1.5; }
 .option-row { display: flex; justify-content: space-between; align-items: center; gap: 30px; background: var(--panel-soft); padding: 18px; border-radius: 8px; }
 .option-row strong { display: block; margin-bottom: 7px; }
 .option-row p { font-size: 13px; line-height: 1.5; }
@@ -132,8 +139,12 @@ p, .muted { color: var(--muted); }
 .homarr-settings { display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; }
 .runtime-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .option-help { grid-column: 1 / -1; font-size: 13px; line-height: 1.5; padding: 4px 0; }
-.options-divider { height: 1px; background: var(--border); margin: 5px 0 0; }
-.option-heading { margin-bottom: 0; }
+.sync-action { display: flex; align-items: center; gap: 12px; }
+.sync-button { gap: 9px; }
+.sync-button:disabled { cursor: wait; opacity: .7; }
+.sync-spinner { display: none; width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; }
+.sync-button.is-syncing .sync-spinner { display: inline-block; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; }
 input, select, textarea { width: 100%; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--bg); padding: 10px 11px; font: inherit; }
 textarea { resize: vertical; }
@@ -163,4 +174,5 @@ textarea { resize: vertical; }
   .option-row { align-items: start; }
   .homarr-settings { grid-template-columns: 1fr; }
   .runtime-settings { grid-template-columns: 1fr; }
+  .sync-action { display: grid; }
 }

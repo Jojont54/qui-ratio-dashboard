@@ -73,6 +73,19 @@ class CollectorTests(unittest.TestCase):
 
         self.assertEqual(payload["counts"]["trackerTransfers"]["tracker.example"]["downloaded"], 0)
 
+    def test_prowlarr_candidates_are_limited_to_the_collection_window(self):
+        candidates = collector.recent_torrent_hashes(
+            [
+                {"hash": "new", "added_at": 980},
+                {"hash": "old", "added_at": 800},
+                {"hash": "undated"},
+            ],
+            60,
+            current_time=1000,
+        )
+
+        self.assertEqual(candidates, {"new", "undated"})
+
 
 class DirectClientTests(unittest.TestCase):
     def test_qbittorrent_client_builds_tracker_summary(self):
@@ -87,6 +100,7 @@ class DirectClientTests(unittest.TestCase):
                     "uploaded": 14,
                     "downloaded": 7,
                     "total_size": 20,
+                    "added_on": 42,
                 }
             ],
         )
@@ -96,6 +110,11 @@ class DirectClientTests(unittest.TestCase):
             ).fetch_torrents_summary()
 
         self.assertEqual(payload["counts"]["trackerTransfers"]["qbit.example"]["uploaded"], 14)
+        with patch.object(direct_clients.requests, "Session", return_value=session):
+            transfers = direct_clients.QBittorrentClient(
+                "http://qbit", "user", "password"
+            ).fetch_torrents()
+        self.assertEqual(transfers[0]["added_at"], 42)
 
     def test_transmission_client_handles_session_challenge_and_builds_summary(self):
         rejected = Mock(
@@ -114,6 +133,7 @@ class DirectClientTests(unittest.TestCase):
                             "uploadedEver": 14,
                             "downloadedEver": 7,
                             "totalSize": 20,
+                            "addedDate": 42,
                             "trackers": [{"announce": "udp://transmission.example/announce"}],
                         }
                     ]
@@ -126,6 +146,7 @@ class DirectClientTests(unittest.TestCase):
         self.assertEqual(
             payload["counts"]["trackerTransfers"]["transmission.example"]["downloaded"], 7
         )
+        self.assertIn("addedDate", accepted.json()["arguments"]["torrents"][0])
 
     def test_deluge_client_builds_tracker_summary(self):
         session = Mock()
@@ -141,6 +162,7 @@ class DirectClientTests(unittest.TestCase):
                             "total_uploaded": 14,
                             "total_done": 7,
                             "total_size": 20,
+                            "time_added": 42,
                         }
                     }
                 },

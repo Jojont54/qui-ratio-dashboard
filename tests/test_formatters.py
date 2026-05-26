@@ -223,6 +223,35 @@ class TrackerVisibilityTests(unittest.TestCase):
         self.assertEqual(rows[0]["uploaded"], 150)
         self.assertEqual(rows[0]["downloaded"], 15)
 
+    def test_parent_and_subdomain_from_different_clients_are_one_dashboard_row(self):
+        database.load_tracker_configuration(["abn.lol", "tracker.abn.lol"])
+        database.group_domains(["abn.lol", "tracker.abn.lol"], "ABN")
+
+        rows = formatters.aggregate_tracker_rows(
+            [
+                {
+                    "_key": "tracker.abn.lol",
+                    "domain": "tracker.abn.lol",
+                    "uploaded": 100,
+                    "downloaded": 20,
+                    "count": 1,
+                    "total_size": 300,
+                },
+                {
+                    "_key": "abn.lol",
+                    "domain": "abn.lol",
+                    "uploaded": 50,
+                    "downloaded": 10,
+                    "count": 2,
+                    "total_size": 200,
+                },
+            ]
+        )
+        row = next(row for row in rows if row["tracker"] == "ABN")
+        self.assertEqual(row["uploaded"], 150)
+        self.assertEqual(row["downloaded"], 30)
+        self.assertEqual(row["count"], 3)
+
     def test_placeholder_legacy_history_is_not_rendered(self):
         rows = formatters.aggregate_tracker_rows(
             [], {"tracker_name": {"uploaded": 100, "downloaded": 50}}
