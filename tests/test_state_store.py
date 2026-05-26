@@ -89,45 +89,45 @@ class DomainLedgerTests(unittest.TestCase):
     def test_previous_tracker_state_becomes_a_legacy_adjustment(self):
         with open(state_store.STATE_PATH, "w", encoding="utf-8") as state_file:
             json.dump(
-                {"version": 2, "trackers": {"ygg": {"prev_raw_u": 100, "prev_raw_d": 50}}},
+                {"version": 2, "trackers": {"sample": {"prev_raw_u": 100, "prev_raw_d": 50}}},
                 state_file,
             )
 
         rows, adjustments = self.apply(
-            [self.domain_row("tracker.ygg.example", 20, 10)],
-            {"tracker.ygg.example": "ygg"},
+            [self.domain_row("tracker.sample.example", 20, 10)],
+            {"tracker.sample.example": "sample"},
         )
 
         self.assertEqual(rows[0]["uploaded"], 20)
-        self.assertEqual(adjustments["ygg"], {"uploaded": 80, "downloaded": 40})
+        self.assertEqual(adjustments["sample"], {"uploaded": 80, "downloaded": 40})
 
     def test_events_only_apply_to_new_transfer_deltas(self):
         settings = {
-            "ygg": {
+            "sample": {
                 "event_uploaded_multiplier": 2,
                 "event_downloaded_multiplier": 0.5,
             }
         }
         rows, _, _, _ = state_store.apply_domain_ledger(
-            [self.domain_row("tracker.ygg.example", 100, 50)],
-            {"tracker.ygg.example": "ygg"},
+            [self.domain_row("tracker.sample.example", 100, 50)],
+            {"tracker.sample.example": "sample"},
             settings,
         )
         self.assertEqual(rows[0]["uploaded"], 100)
         self.assertEqual(rows[0]["downloaded"], 50)
 
         rows, _, _, _ = state_store.apply_domain_ledger(
-            [self.domain_row("tracker.ygg.example", 110, 60)],
-            {"tracker.ygg.example": "ygg"},
+            [self.domain_row("tracker.sample.example", 110, 60)],
+            {"tracker.sample.example": "sample"},
             settings,
         )
         self.assertEqual(rows[0]["uploaded"], 120)
         self.assertEqual(rows[0]["downloaded"], 55)
 
         rows, _, _, _ = state_store.apply_domain_ledger(
-            [self.domain_row("tracker.ygg.example", 120, 70)],
-            {"tracker.ygg.example": "ygg"},
-            {"ygg": {"event_uploaded_multiplier": 1, "event_downloaded_multiplier": 0}},
+            [self.domain_row("tracker.sample.example", 120, 70)],
+            {"tracker.sample.example": "sample"},
+            {"sample": {"event_uploaded_multiplier": 1, "event_downloaded_multiplier": 0}},
         )
         self.assertEqual(rows[0]["uploaded"], 130)
         self.assertEqual(rows[0]["downloaded"], 55)

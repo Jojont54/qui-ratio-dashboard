@@ -44,16 +44,16 @@ class DatabaseTests(unittest.TestCase):
         contents = {
             trackers_path: {
                 "trackers": {
-                    "ygg": {
-                        "display": "YGG",
+                    "sample": {
+                        "display": "Sample Tracker",
                         "visible": False,
-                        "domains": ["tracker.ygg.example"],
+                        "domains": ["tracker.sample.example"],
                     }
                 }
             },
             buffers_path: {
                 "buffers": {
-                    "ygg": {"uploaded_add": "10 TiB", "downloaded_add": "2 TiB"}
+                    "sample": {"uploaded_add": "10 TiB", "downloaded_add": "2 TiB"}
                 }
             },
         }
@@ -62,17 +62,17 @@ class DatabaseTests(unittest.TestCase):
         database.init_database()
 
         _, config = database.load_tracker_configuration()
-        self.assertEqual(config["ygg"]["display"], "YGG")
-        self.assertFalse(config["ygg"]["visible_widget"])
-        self.assertEqual(config["ygg"]["uploaded_add"], 10 * 1024**4)
+        self.assertEqual(config["sample"]["display"], "Sample Tracker")
+        self.assertFalse(config["sample"]["visible_widget"])
+        self.assertEqual(config["sample"]["uploaded_add"], 10 * 1024**4)
         self.assertEqual(database.list_trackers()[0]["buffer_uploaded_text"], "10 TiB")
         self.assertFalse(os.path.exists(trackers_path))
         self.assertFalse(os.path.exists(buffers_path))
 
-        contents[buffers_path]["buffers"]["ygg"]["uploaded_add"] = "99 TiB"
+        contents[buffers_path]["buffers"]["sample"]["uploaded_add"] = "99 TiB"
         database.init_database()
         _, config = database.load_tracker_configuration()
-        self.assertEqual(config["ygg"]["uploaded_add"], 10 * 1024**4)
+        self.assertEqual(config["sample"]["uploaded_add"], 10 * 1024**4)
         with database._database() as connection:
             status = connection.execute(
                 "SELECT value FROM app_metadata WHERE key = 'legacy_yaml_migration'"
@@ -150,29 +150,29 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(database.list_trackers()[0]["domains"], ["new.tracker.example"])
 
     def test_detected_parent_domain_and_its_subdomain_are_automatically_grouped(self):
-        database.load_tracker_configuration(["tracker.abn.lol", "abn.lol"])
+        database.load_tracker_configuration(["tracker.example.test", "example.test"])
 
         trackers = database.list_trackers()
         self.assertEqual(len(trackers), 1)
-        self.assertEqual(trackers[0]["display_name"], "abn.lol")
-        self.assertEqual(trackers[0]["domains"], ["abn.lol", "tracker.abn.lol"])
+        self.assertEqual(trackers[0]["display_name"], "example.test")
+        self.assertEqual(trackers[0]["domains"], ["example.test", "tracker.example.test"])
 
     def test_detected_subdomain_joins_an_existing_named_parent_tracker(self):
-        database.load_tracker_configuration(["abn.lol"])
-        database.group_domains(["abn.lol"], "ABN")
+        database.load_tracker_configuration(["example.test"])
+        database.group_domains(["example.test"], "Sample Tracker")
 
-        database.load_tracker_configuration(["tracker.abn.lol"])
+        database.load_tracker_configuration(["tracker.example.test"])
 
         trackers = database.list_trackers()
         self.assertEqual(len(trackers), 1)
-        self.assertEqual(trackers[0]["display_name"], "ABN")
-        self.assertEqual(trackers[0]["domains"], ["abn.lol", "tracker.abn.lol"])
+        self.assertEqual(trackers[0]["display_name"], "Sample Tracker")
+        self.assertEqual(trackers[0]["domains"], ["example.test", "tracker.example.test"])
 
     def test_manually_unlinked_related_domains_are_not_linked_again(self):
-        database.load_tracker_configuration(["tracker.abn.lol", "abn.lol"])
-        database.unlink_domains(["tracker.abn.lol"])
+        database.load_tracker_configuration(["tracker.example.test", "example.test"])
+        database.unlink_domains(["tracker.example.test"])
 
-        database.load_tracker_configuration(["tracker.abn.lol", "abn.lol"])
+        database.load_tracker_configuration(["tracker.example.test", "example.test"])
 
         trackers = database.list_trackers()
         self.assertEqual(len(trackers), 2)
@@ -184,7 +184,7 @@ class DatabaseTests(unittest.TestCase):
                 "DELETE FROM app_metadata WHERE key = ?",
                 (database._AUTO_PARENT_DOMAIN_GROUPING_KEY,),
             )
-            for domain in ("abn.lol", "tracker.abn.lol"):
+            for domain in ("example.test", "tracker.example.test"):
                 connection.execute(
                     "INSERT INTO trackers (key, display_name) VALUES (?, ?)",
                     (domain, domain),
@@ -197,7 +197,7 @@ class DatabaseTests(unittest.TestCase):
         database.init_database()
         self.assertEqual(len(database.list_trackers()), 1)
 
-        database.unlink_domains(["tracker.abn.lol"])
+        database.unlink_domains(["tracker.example.test"])
         database.init_database()
         self.assertEqual(len(database.list_trackers()), 2)
 

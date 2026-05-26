@@ -103,7 +103,7 @@ unlink button to return them to individual trackers. The Dashboard and Homarr
 widget show one consolidated row per name. Select all domains of an existing
 group and link them to a new name to rename it while keeping its buffers.
 When both a tracker domain and one of its subdomains are detected, such as
-`abn.lol` and `tracker.abn.lol`, they are automatically linked on discovery;
+`example.test` and `tracker.example.test`, they are automatically linked on discovery;
 an explicit unlink remains separate afterwards.
 The display name, visibility and buffers are edited in the same screen and
 saved together with the global save button. Upload and download event menus
