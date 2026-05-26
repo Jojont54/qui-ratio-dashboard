@@ -5,14 +5,14 @@
 <header class="page-header">
   <div>
     <h1>Clients torrent</h1>
-    <p>Connectez une ou plusieurs instances QUI pour reunir leurs statistiques.</p>
+    <p>Connectez QUI, qBittorrent, Transmission, Deluge ou rTorrent pour reunir leurs statistiques.</p>
   </div>
   <button class="button add-client-button" type="button" onclick="document.getElementById('add-client-dialog').showModal()" aria-label="Ajouter un client">+</button>
 </header>
 
 <section class="panel">
   <div class="panel-heading">
-    <h2>Connexions QUI</h2>
+    <h2>Connexions torrent</h2>
     <span class="badge">{{ clients|length }} client{% if clients|length != 1 %}s{% endif %}</span>
   </div>
   <div class="client-grid">
@@ -41,10 +41,27 @@
       <dl class="client-details">
         <dt>Adresse</dt>
         <dd>{{ client.base_url }}</dd>
+        {% if client.client_type == "QUI" %}
         <dt>Instance</dt>
         <dd>#{{ client.instance_id }}</dd>
         <dt>Cle API</dt>
         <dd>{{ client.api_key_hint }}</dd>
+        {% elif client.client_type == "DELUGE" and client.instance_id %}
+        <dt>Daemon</dt>
+        <dd>{{ client.instance_id }}</dd>
+        {% endif %}
+        {% if client.client_type != "QUI" and client.username %}
+        <dt>Utilisateur</dt>
+        <dd>{{ client.username }}</dd>
+        {% endif %}
+        {% if client.client_type != "QUI" and client.password_hint %}
+        <dt>Mot de passe</dt>
+        <dd>{{ client.password_hint }}</dd>
+        {% endif %}
+        {% if client.rpc_path %}
+        <dt>RPC</dt>
+        <dd>{{ client.rpc_path }}</dd>
+        {% endif %}
         <dt>Depart</dt>
         <dd>
           {% if client.sync_pending %}En attente :
@@ -54,17 +71,25 @@
       </dl>
     </article>
     <dialog class="client-dialog" id="edit-client-dialog-{{ client.id }}">
-      <form class="dialog-form client-connect-form" method="post" action="{{ url_for('update_client', client_id=client.id) }}" data-client-id="{{ client.id }}">
+      <form class="dialog-form client-connect-form" method="post" action="{{ url_for('update_client', client_id=client.id) }}" data-client-id="{{ client.id }}" data-editing="true">
         <div class="dialog-heading">
           <div>
             <h2>Modifier le client</h2>
-            <p>Connexion QUI</p>
+            <p>Connexion {{ client.client_type }}</p>
           </div>
           <button class="close-button" type="button" data-close-dialog aria-label="Fermer">x</button>
         </div>
         <label>
           Nom
           <input name="name" value="{{ client.name }}" required>
+        </label>
+        <label>
+          Type de client
+          <select name="client_type" class="client-type-select">
+            {% for type in ["QUI", "QBITTORRENT", "TRANSMISSION", "DELUGE", "RTORRENT"] %}
+            <option value="{{ type }}" {% if client.client_type == type %}selected{% endif %}>{{ type }}</option>
+            {% endfor %}
+          </select>
         </label>
         <label>
           Adresse
@@ -74,20 +99,40 @@
           Port
           <input type="number" min="1" max="65535" name="port" value="{{ client.port }}" placeholder="7476">
         </label>
-        <label>
+        <label data-client-types="QUI">
           Cle API
           <input type="password" name="api_key" placeholder="Laisser vide pour conserver la cle" autocomplete="off">
         </label>
-        <div class="instance-discovery">
+        <label data-client-types="QBITTORRENT TRANSMISSION RTORRENT">
+          Utilisateur
+          <input name="username" value="{{ client.username }}" placeholder="Optionnel selon le client">
+        </label>
+        <label data-client-types="QBITTORRENT TRANSMISSION DELUGE RTORRENT">
+          Mot de passe
+          <input type="password" name="password" placeholder="Laisser vide pour conserver le mot de passe" autocomplete="off">
+        </label>
+        <label data-client-types="TRANSMISSION RTORRENT">
+          Chemin RPC
+          <input name="rpc_path" value="{{ client.rpc_path }}" placeholder="/transmission/rpc ou /RPC2">
+        </label>
+        <div class="instance-discovery" data-client-types="QUI">
           <button class="button secondary discover-instances" type="button">Charger les instances</button>
           <span class="instance-status">Instance actuelle : #{{ client.instance_id }}</span>
         </div>
-        <label>
+        <label data-client-types="QUI">
           Instance qBittorrent dans QUI
-          <select name="instance_id" class="instance-id" required>
+          <select name="instance_id" class="instance-id" data-loaded="true" required>
             <option value="{{ client.instance_id }}" selected>Instance actuelle (#{{ client.instance_id }})</option>
           </select>
         </label>
+        <label data-client-types="DELUGE">
+          ID du daemon Deluge
+          <input name="instance_id" value="{{ client.instance_id }}" placeholder="Optionnel si deja connecte dans Deluge Web">
+        </label>
+        <div class="instance-discovery" data-client-types="QBITTORRENT TRANSMISSION DELUGE RTORRENT">
+          <button class="button secondary test-client" type="button">Tester la connexion</button>
+          <span class="instance-status test-status">Verifiez les parametres avant de sauver.</span>
+        </div>
         <fieldset class="sync-mode">
           <legend>A la prochaine connexion</legend>
           <label class="radio-option">
@@ -96,7 +141,7 @@
           </label>
           <label class="radio-option">
             <input type="radio" name="initial_sync_mode" value="replace">
-            <span>Effacer les valeurs stockees <small>Repart directement des valeurs envoyees par QUI.</small></span>
+            <span>Effacer les valeurs stockees <small>Repart directement des valeurs envoyees par le client.</small></span>
           </label>
           <label class="radio-option">
             <input type="radio" name="initial_sync_mode" value="add">
@@ -124,13 +169,23 @@
     <div class="dialog-heading">
       <div>
         <h2>Ajouter un client</h2>
-        <p>Connexion QUI</p>
+    <p>Connexion client torrent</p>
       </div>
       <button class="close-button" type="button" data-close-dialog aria-label="Fermer">x</button>
     </div>
     <label>
       Nom
       <input name="name" value="QUI" required>
+    </label>
+    <label>
+      Type de client
+      <select name="client_type" class="client-type-select">
+        <option value="QUI" selected>QUI</option>
+        <option value="QBITTORRENT">QBITTORRENT</option>
+        <option value="TRANSMISSION">TRANSMISSION</option>
+        <option value="DELUGE">DELUGE</option>
+        <option value="RTORRENT">RTORRENT</option>
+      </select>
     </label>
     <label>
       Adresse
@@ -140,25 +195,45 @@
       Port
       <input type="number" min="1" max="65535" name="port" placeholder="7476">
     </label>
-    <label>
+    <label data-client-types="QUI">
       Cle API
       <input type="password" name="api_key" required autocomplete="off">
     </label>
-    <div class="instance-discovery">
+    <label data-client-types="QBITTORRENT TRANSMISSION RTORRENT">
+      Utilisateur
+      <input name="username" placeholder="Optionnel selon le client">
+    </label>
+    <label data-client-types="QBITTORRENT TRANSMISSION DELUGE RTORRENT">
+      Mot de passe
+      <input type="password" name="password" autocomplete="off">
+    </label>
+    <label data-client-types="TRANSMISSION RTORRENT">
+      Chemin RPC
+      <input name="rpc_path" placeholder="/transmission/rpc ou /RPC2">
+    </label>
+    <div class="instance-discovery" data-client-types="QUI">
       <button class="button secondary discover-instances" type="button">Charger les instances</button>
       <span class="instance-status">Connectez QUI pour choisir qBittorrent.</span>
     </div>
-    <label>
+    <label data-client-types="QUI">
       Instance qBittorrent dans QUI
       <select name="instance_id" class="instance-id" required disabled>
         <option value="">Chargez les instances disponibles</option>
       </select>
     </label>
+    <label data-client-types="DELUGE">
+      ID du daemon Deluge
+      <input name="instance_id" placeholder="Optionnel si deja connecte dans Deluge Web">
+    </label>
+    <div class="instance-discovery" data-client-types="QBITTORRENT TRANSMISSION DELUGE RTORRENT">
+      <button class="button secondary test-client" type="button">Tester la connexion</button>
+      <span class="instance-status test-status">Verifiez les parametres avant d'ajouter.</span>
+    </div>
     <fieldset class="sync-mode">
       <legend>Valeurs au premier releve (choix obligatoire)</legend>
       <label class="radio-option">
         <input type="radio" name="initial_sync_mode" value="replace" required>
-        <span>Effacer les valeurs stockees <small>Affiche directement les valeurs envoyees par QUI.</small></span>
+        <span>Effacer les valeurs stockees <small>Affiche directement les valeurs envoyees par le client.</small></span>
       </label>
       <label class="radio-option">
         <input type="radio" name="initial_sync_mode" value="add">
@@ -182,9 +257,31 @@
     });
 
     document.querySelectorAll(".client-connect-form").forEach((form) => {
+      const typeSelect = form.querySelector(".client-type-select");
       const button = form.querySelector(".discover-instances");
+      const testButton = form.querySelector(".test-client");
       const status = form.querySelector(".instance-status");
       const select = form.querySelector(".instance-id");
+      const updateFields = () => {
+        const type = typeSelect.value;
+        form.querySelectorAll("[data-client-types]").forEach((container) => {
+          const visible = container.dataset.clientTypes.split(" ").includes(type);
+          container.hidden = !visible;
+          container.querySelectorAll("input, select, button").forEach((field) => {
+            field.disabled = !visible;
+          });
+        });
+        if (type === "QUI" && select && select.dataset.loaded !== "true") {
+          select.disabled = true;
+        }
+        const rpc = form.elements.rpc_path;
+        if (rpc && !rpc.value) {
+          if (type === "TRANSMISSION") rpc.value = "/transmission/rpc";
+          if (type === "RTORRENT") rpc.value = "/RPC2";
+        }
+      };
+      typeSelect.addEventListener("change", updateFields);
+      updateFields();
       button.addEventListener("click", async () => {
         const data = new FormData();
         data.append("address", form.elements.address.value);
@@ -211,10 +308,30 @@
           if (payload.instances.length === 0) {
             throw new Error("Aucune instance qBittorrent trouvee dans QUI.");
           }
+          select.dataset.loaded = "true";
           select.disabled = false;
           status.textContent = payload.instances.length + " instance(s) disponible(s).";
         } catch (error) {
           status.textContent = error.message;
+        }
+      });
+      testButton.addEventListener("click", async () => {
+        const result = form.querySelector(".test-status");
+        const data = new FormData(form);
+        data.append("client_id", form.dataset.clientId || "");
+        result.textContent = "Test de connexion...";
+        try {
+          const response = await fetch("{{ url_for('test_torrent_client_connection') }}", {
+            method: "POST",
+            body: data,
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || "Connexion impossible.");
+          }
+          result.textContent = payload.message;
+        } catch (error) {
+          result.textContent = error.message;
         }
       });
     });

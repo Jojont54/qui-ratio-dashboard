@@ -14,6 +14,7 @@ from .units import fmt_bytes, parse_bytes
 
 _lock = RLock()
 _LEGACY_MIGRATION_KEY = "legacy_yaml_migration"
+_AUTO_PARENT_DOMAIN_GROUPING_KEY = "automatic_parent_domain_grouping_v1"
 
 
 def _now_utc():
@@ -155,7 +156,25 @@ def init_database():
                 api_key TEXT NOT NULL,
                 instance_id TEXT NOT NULL DEFAULT '1',
                 initial_sync_mode TEXT NOT NULL DEFAULT 'preserve',
-                sync_pending INTEGER NOT NULL DEFAULT 0
+                sync_pending INTEGER NOT NULL DEFAULT 0,
+                username TEXT NOT NULL DEFAULT '',
+                password TEXT NOT NULL DEFAULT '',
+                rpc_path TEXT NOT NULL DEFAULT '',
+                last_connection_success INTEGER,
+                last_connection_at TEXT,
+                last_connection_error TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS torrent_rules (
+                client_id INTEGER NOT NULL REFERENCES torrent_clients(id) ON DELETE CASCADE,
+                torrent_hash TEXT NOT NULL,
+                tracker TEXT NOT NULL DEFAULT '',
+                upload_multiplier REAL NOT NULL DEFAULT 1.0,
+                download_multiplier REAL NOT NULL DEFAULT 1.0,
+                label TEXT NOT NULL DEFAULT 'Normal',
+                source TEXT NOT NULL DEFAULT 'detected',
+                created_at TEXT NOT NULL,
+                lookup_attempts INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (client_id, torrent_hash)
             );
             """
         )
@@ -183,9 +202,34 @@ def init_database():
         _add_column_if_missing(
             connection, "torrent_clients", "sync_pending", "INTEGER NOT NULL DEFAULT 0"
         )
+        _add_column_if_missing(
+            connection, "torrent_clients", "username", "TEXT NOT NULL DEFAULT ''"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "password", "TEXT NOT NULL DEFAULT ''"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "rpc_path", "TEXT NOT NULL DEFAULT ''"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "last_connection_success", "INTEGER"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "last_connection_at", "TEXT"
+        )
+        _add_column_if_missing(
+            connection, "torrent_clients", "last_connection_error", "TEXT NOT NULL DEFAULT ''"
+        )
+        _add_column_if_missing(
+            connection, "torrent_rules", "lookup_attempts", "INTEGER NOT NULL DEFAULT 1"
+        )
+        connection.execute(
+            "DELETE FROM app_metadata WHERE key = 'background_refresh_enabled'"
+        )
         _migrate_legacy_yaml_once(connection)
         _remove_example_placeholder(connection)
         _merge_duplicate_display_names(connection)
+        _auto_group_existing_parent_domains_once(connection)
 
 
 def _expire_events(connection):
@@ -268,6 +312,24 @@ def _initial_sync_mode(value, default="preserve"):
     return mode if mode in {"replace", "add", "preserve"} else default
 
 
+def _client_type(value):
+    client_type = str(value or "QUI").strip().upper()
+    return (
+        client_type
+        if client_type in {"QUI", "QBITTORRENT", "TRANSMISSION", "DELUGE", "RTORRENT"}
+        else "QUI"
+    )
+
+
+def _secret_hint(secret):
+    secret = str(secret or "")
+    return (
+        ("*" * (len(secret) - 4)) + secret[-4:]
+        if len(secret) > 4
+        else "*" * len(secret)
+    )
+
+
 def list_torrent_clients():
     init_database()
     with _lock, _database() as connection:
@@ -278,59 +340,94 @@ def list_torrent_clients():
         {
             "id": int(row["id"]),
             "name": row["name"],
-            "client_type": row["client_type"],
+            "client_type": _client_type(row["client_type"]),
             "address": row["address"],
             "port": row["port"] or "",
             "base_url": _client_base_url(row["address"], row["port"]),
             "api_key": row["api_key"],
-            "api_key_hint": (
-                ("*" * (len(row["api_key"]) - 4)) + row["api_key"][-4:]
-                if len(row["api_key"]) > 4
-                else "*" * len(row["api_key"])
-            ),
+            "api_key_hint": _secret_hint(row["api_key"]),
+            "username": row["username"],
+            "password": row["password"],
+            "password_hint": _secret_hint(row["password"]),
+            "rpc_path": row["rpc_path"],
             "instance_id": row["instance_id"],
             "initial_sync_mode": _initial_sync_mode(row["initial_sync_mode"]),
             "sync_pending": bool(row["sync_pending"]),
+            "last_connection_success": (
+                None
+                if row["last_connection_success"] is None
+                else bool(row["last_connection_success"])
+            ),
+            "last_connection_at": row["last_connection_at"] or "",
+            "last_connection_error": row["last_connection_error"] or "",
         }
         for row in rows
     ]
 
 
-def add_torrent_client(name, address, port, api_key, instance_id="1", initial_sync_mode="preserve"):
+def add_torrent_client(
+    name,
+    address,
+    port,
+    api_key="",
+    instance_id="1",
+    initial_sync_mode="preserve",
+    client_type="QUI",
+    username="",
+    password="",
+    rpc_path="",
+):
     init_database()
+    clean_type = _client_type(client_type)
     clean_address = str(address).strip().rstrip("/")
     clean_api_key = str(api_key).strip()
-    if not clean_address or not clean_api_key:
+    if not clean_address or (clean_type == "QUI" and not clean_api_key):
         return None
     try:
         clean_port = int(port) if str(port or "").strip() else None
     except ValueError:
         return None
     with _lock, _database() as connection:
+        clean_instance_id = str(instance_id).strip() or ("1" if clean_type == "QUI" else "")
         cursor = connection.execute(
             """
             INSERT INTO torrent_clients (
                 name, client_type, address, port, api_key, instance_id,
-                initial_sync_mode, sync_pending
+                initial_sync_mode, sync_pending, username, password, rpc_path
             )
-            VALUES (?, 'QUI', ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             """,
             (
-                str(name).strip() or "QUI",
+                str(name).strip() or clean_type,
+                clean_type,
                 clean_address,
                 clean_port,
                 clean_api_key,
-                str(instance_id).strip() or "1",
+                clean_instance_id,
                 _initial_sync_mode(initial_sync_mode),
+                str(username).strip(),
+                str(password),
+                str(rpc_path).strip(),
             ),
         )
         return int(cursor.lastrowid)
 
 
 def update_torrent_client(
-    client_id, name, address, port, api_key, instance_id, initial_sync_mode=""
+    client_id,
+    name,
+    address,
+    port,
+    api_key,
+    instance_id,
+    initial_sync_mode="",
+    client_type="QUI",
+    username="",
+    password="",
+    rpc_path="",
 ):
     init_database()
+    clean_type = _client_type(client_type)
     clean_address = str(address).strip().rstrip("/")
     if not clean_address:
         return False
@@ -340,12 +437,18 @@ def update_torrent_client(
         return False
     with _lock, _database() as connection:
         current = connection.execute(
-            "SELECT api_key, initial_sync_mode, sync_pending FROM torrent_clients WHERE id = ?",
+            """
+            SELECT api_key, password, initial_sync_mode, sync_pending
+            FROM torrent_clients WHERE id = ?
+            """,
             (int(client_id),),
         ).fetchone()
         if current is None:
             return False
         clean_api_key = str(api_key).strip() or current["api_key"]
+        clean_password = str(password) or current["password"]
+        if clean_type == "QUI" and not clean_api_key:
+            return False
         requested_mode = str(initial_sync_mode or "").strip().lower()
         reset_requested = requested_mode in {"replace", "add", "preserve"}
         clean_mode = (
@@ -354,25 +457,49 @@ def update_torrent_client(
             else _initial_sync_mode(current["initial_sync_mode"])
         )
         sync_pending = 1 if reset_requested else int(current["sync_pending"])
+        clean_instance_id = str(instance_id).strip() or ("1" if clean_type == "QUI" else "")
         connection.execute(
             """
             UPDATE torrent_clients
-            SET name = ?, address = ?, port = ?, api_key = ?, instance_id = ?,
-                initial_sync_mode = ?, sync_pending = ?
+            SET name = ?, client_type = ?, address = ?, port = ?, api_key = ?, instance_id = ?,
+                initial_sync_mode = ?, sync_pending = ?, username = ?, password = ?, rpc_path = ?
             WHERE id = ?
             """,
             (
-                str(name).strip() or "QUI",
+                str(name).strip() or clean_type,
+                clean_type,
                 clean_address,
                 clean_port,
                 clean_api_key,
-                str(instance_id).strip() or "1",
+                clean_instance_id,
                 clean_mode,
                 sync_pending,
+                str(username).strip(),
+                clean_password,
+                str(rpc_path).strip(),
                 int(client_id),
             ),
         )
     return True
+
+
+def update_torrent_client_connection_status(client_id, success, error=""):
+    init_database()
+    with _lock, _database() as connection:
+        connection.execute(
+            """
+            UPDATE torrent_clients
+            SET last_connection_success = ?, last_connection_at = ?,
+                last_connection_error = ?
+            WHERE id = ?
+            """,
+            (
+                1 if success else 0,
+                _now_utc().isoformat(),
+                "" if success else str(error or "")[:500],
+                int(client_id),
+            ),
+        )
 
 
 def get_torrent_client(client_id):
@@ -446,9 +573,11 @@ def get_app_options():
                 'homarr_auth_enabled',
                 'homarr_base_url',
                 'homarr_session_endpoint',
-                'background_refresh_enabled',
                 'refresh_interval_seconds',
-                'http_timeout_seconds'
+                'http_timeout_seconds',
+                'prowlarr_enabled',
+                'prowlarr_base_url',
+                'prowlarr_api_key'
             )
             """
         ).fetchall()
@@ -463,10 +592,13 @@ def get_app_options():
         "homarr_session_endpoint": stored.get(
             "homarr_session_endpoint", "/api/auth/session"
         ),
-        "background_refresh_enabled": stored.get("background_refresh_enabled", "1") != "0",
         "refresh_interval_seconds": refresh_interval_seconds,
         "refresh_interval_minutes": max(1, int(round(refresh_interval_seconds / 60))),
         "http_timeout_seconds": max(1.0, _stored_float(stored, "http_timeout_seconds", 10)),
+        "prowlarr_enabled": stored.get("prowlarr_enabled", "0") == "1",
+        "prowlarr_base_url": stored.get("prowlarr_base_url", ""),
+        "prowlarr_api_key": stored.get("prowlarr_api_key", ""),
+        "prowlarr_api_key_hint": _secret_hint(stored.get("prowlarr_api_key", "")),
     }
 
 
@@ -475,9 +607,11 @@ def update_app_options(
     homarr_auth_enabled=False,
     homarr_base_url="",
     homarr_session_endpoint="/api/auth/session",
-    background_refresh_enabled=True,
     refresh_interval_minutes=60,
     http_timeout_seconds=10,
+    prowlarr_enabled=False,
+    prowlarr_base_url="",
+    prowlarr_api_key="",
 ):
     init_database()
     try:
@@ -493,9 +627,11 @@ def update_app_options(
         "homarr_auth_enabled": "1" if homarr_auth_enabled else "0",
         "homarr_base_url": str(homarr_base_url).strip().rstrip("/"),
         "homarr_session_endpoint": str(homarr_session_endpoint).strip() or "/api/auth/session",
-        "background_refresh_enabled": "1" if background_refresh_enabled else "0",
         "refresh_interval_seconds": str(refresh_interval_seconds),
         "http_timeout_seconds": str(clean_timeout),
+        "prowlarr_enabled": "1" if prowlarr_enabled else "0",
+        "prowlarr_base_url": str(prowlarr_base_url).strip().rstrip("/"),
+        "prowlarr_api_key": str(prowlarr_api_key).strip(),
     }
     with _lock, _database() as connection:
         for key, value in settings.items():
@@ -507,6 +643,79 @@ def update_app_options(
                 """,
                 (key, value),
             )
+
+
+def get_torrent_rules(client_id, torrent_hashes=()):
+    init_database()
+    hashes = sorted({str(value or "").strip().lower() for value in torrent_hashes if str(value or "").strip()})
+    if not hashes:
+        return {}
+    with _lock, _database() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT torrent_hash, upload_multiplier, download_multiplier, label, source,
+                   lookup_attempts
+            FROM torrent_rules
+            WHERE client_id = ? AND torrent_hash IN ({",".join("?" for _ in hashes)})
+            """,
+            [int(client_id), *hashes],
+        ).fetchall()
+    return {
+        row["torrent_hash"]: {
+            "upload_multiplier": float(row["upload_multiplier"]),
+            "download_multiplier": float(row["download_multiplier"]),
+            "label": row["label"],
+            "source": row["source"],
+            "lookup_attempts": int(row["lookup_attempts"]),
+        }
+        for row in rows
+    }
+
+
+def save_torrent_rule(client_id, torrent_hash, tracker, rule):
+    save_torrent_rules(client_id, [(torrent_hash, tracker, rule)])
+
+
+def save_torrent_rules(client_id, rules):
+    values = []
+    created_at = _now_utc().isoformat()
+    for torrent_hash, tracker, rule in rules:
+        clean_hash = str(torrent_hash or "").strip().lower()
+        if not clean_hash:
+            continue
+        values.append(
+            (
+                int(client_id),
+                clean_hash,
+                str(tracker or ""),
+                float(rule.get("upload_multiplier", 1)),
+                float(rule.get("download_multiplier", 1)),
+                str(rule.get("label", "Normal")),
+                str(rule.get("source", "detected")),
+                created_at,
+            )
+        )
+    if not values:
+        return
+    init_database()
+    with _lock, _database() as connection:
+        connection.executemany(
+            """
+            INSERT INTO torrent_rules (
+                client_id, torrent_hash, tracker, upload_multiplier,
+                download_multiplier, label, source, created_at, lookup_attempts
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT(client_id, torrent_hash) DO UPDATE SET
+                upload_multiplier = excluded.upload_multiplier,
+                download_multiplier = excluded.download_multiplier,
+                label = excluded.label,
+                source = excluded.source,
+                lookup_attempts = torrent_rules.lookup_attempts + 1
+            WHERE torrent_rules.source = 'prowlarr-miss'
+            """,
+            values,
+        )
 
 
 def _import_legacy_yaml(connection, trackers_path, buffers_path):
@@ -571,10 +780,92 @@ def _remove_example_placeholder(connection):
     )
 
 
+def _is_parent_domain(parent, child):
+    clean_parent = str(parent).strip().lower().rstrip(".")
+    clean_child = str(child).strip().lower().rstrip(".")
+    return bool(clean_parent and clean_child.endswith(f".{clean_parent}"))
+
+
+def _merge_related_domains(connection, parent_domain, child_domain):
+    rows = {
+        row["domain"]: row
+        for row in connection.execute(
+            """
+            SELECT d.domain, d.tracker_key, t.display_name
+            FROM tracker_domains AS d
+            JOIN trackers AS t ON t.key = d.tracker_key
+            WHERE d.domain IN (?, ?)
+            """,
+            (parent_domain, child_domain),
+        ).fetchall()
+    }
+    parent = rows.get(parent_domain)
+    child = rows.get(child_domain)
+    if parent is None or child is None or parent["tracker_key"] == child["tracker_key"]:
+        return
+    parent_named = parent["display_name"].casefold() != parent_domain.casefold()
+    child_named = child["display_name"].casefold() != child_domain.casefold()
+    if parent_named and child_named:
+        return
+    target = child if child_named else parent
+    source = parent if target is child else child
+    connection.execute(
+        "UPDATE tracker_domains SET tracker_key = ? WHERE domain = ?",
+        (target["tracker_key"], source["domain"]),
+    )
+    _move_empty_tracker_buffers(connection, source["tracker_key"], target["tracker_key"])
+    connection.execute(
+        """
+        DELETE FROM trackers
+        WHERE key = ?
+          AND buffer_uploaded = 0
+          AND buffer_downloaded = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM tracker_domains WHERE tracker_key = trackers.key
+          )
+        """,
+        (source["tracker_key"],),
+    )
+
+
+def _auto_group_parent_domains(connection, candidate_domains):
+    domains = [
+        row["domain"]
+        for row in connection.execute("SELECT domain FROM tracker_domains").fetchall()
+    ]
+    candidates = {str(domain).strip().lower() for domain in candidate_domains}
+    for parent in sorted(domains, key=lambda value: (value.count("."), len(value), value)):
+        for child in domains:
+            if (
+                (parent in candidates or child in candidates)
+                and _is_parent_domain(parent, child)
+            ):
+                _merge_related_domains(connection, parent, child)
+
+
+def _auto_group_existing_parent_domains_once(connection):
+    already_done = connection.execute(
+        "SELECT 1 FROM app_metadata WHERE key = ?",
+        (_AUTO_PARENT_DOMAIN_GROUPING_KEY,),
+    ).fetchone()
+    if already_done is not None:
+        return
+    domains = [
+        row["domain"]
+        for row in connection.execute("SELECT domain FROM tracker_domains").fetchall()
+    ]
+    _auto_group_parent_domains(connection, domains)
+    connection.execute(
+        "INSERT INTO app_metadata (key, value) VALUES (?, ?)",
+        (_AUTO_PARENT_DOMAIN_GROUPING_KEY, "done"),
+    )
+
+
 def ensure_discovered_domains(domains):
     init_database()
+    new_domains = set()
     with _lock, _database() as connection:
-        for domain in domains:
+        for domain in sorted({str(domain).strip().lower() for domain in domains if str(domain).strip()}):
             existing = connection.execute(
                 "SELECT tracker_key FROM tracker_domains WHERE domain = ?", (domain,)
             ).fetchone()
@@ -589,6 +880,9 @@ def ensure_discovered_domains(domains):
                 "INSERT INTO tracker_domains (domain, tracker_key) VALUES (?, ?)",
                 (domain, key),
             )
+            new_domains.add(domain)
+        if new_domains:
+            _auto_group_parent_domains(connection, new_domains)
 
 
 def load_tracker_configuration(domains=()):

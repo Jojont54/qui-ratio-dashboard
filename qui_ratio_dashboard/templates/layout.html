@@ -19,7 +19,17 @@
       <a href="{{ url_for('torrent_clients') }}" class="{% if section == 'clients' %}active{% endif %}">Clients torrent</a>
       <a href="{{ url_for('options') }}" class="{% if section == 'options' %}active{% endif %}">Options</a>
     </nav>
-    <div class="sidebar-note">Source active<br><strong>QUI</strong></div>
+    <div class="sidebar-note">
+      <span class="sidebar-note-title">Sources actives</span>
+      {% for client in sidebar_clients %}
+      <div class="sidebar-source{% if client.last_connection_success is sameas false %} failed{% endif %}"{% if client.last_connection_success is sameas false and client.last_connection_error %} title="Derniere synchronisation echouee : {{ client.last_connection_error }}"{% endif %}>
+        <strong>{{ client.name }}</strong>
+        <span>{{ client.client_type }}</span>
+      </div>
+      {% else %}
+      <span class="sidebar-empty">Aucun client</span>
+      {% endfor %}
+    </div>
   </aside>
   <main class="content">
     {% block content %}{% endblock %}
