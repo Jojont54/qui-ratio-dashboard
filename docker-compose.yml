@@ -6,6 +6,7 @@ services:
     environment:
       QUI_BASE_URL: "http://${IP}:7476"
       HOMARR_BASE_URL: "http://${IP}:7575"
+      FRAME_ANCESTORS: "${FRAME_ANCESTORS:-'self'}"
       QUI_INSTANCE_ID: "1"
       QUI_API_KEY: "${QUI_API_KEY}"
       BACKGROUND_REFRESH_ENABLED: "1"

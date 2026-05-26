@@ -26,6 +26,7 @@ Configuration variables:
 - `HOMARR_AUTH_ENABLED`
 - `HOMARR_BASE_URL`
 - `HOMARR_SESSION_ENDPOINT`
+- `FRAME_ANCESTORS` (CSP values allowed to embed the page, for example `'self' https://homarr.example.test`)
 - `BUFFERS_PATH`
 - `TRACKERS_PATH`
 - `STATE_PATH`

@@ -12,6 +12,7 @@ from .config import (
     HOMARR_AUTH_ENABLED,
     HOMARR_BASE_URL,
     HOMARR_SESSION_ENDPOINT,
+    FRAME_ANCESTORS,
     HTTP_TIMEOUT,
     BACKGROUND_REFRESH_ENABLED,
     REFRESH_INTERVAL_SECONDS,
@@ -81,8 +82,7 @@ def require_homarr_auth():
 
 @app.after_request
 def add_headers(resp):
-    # Autoriser l’embed dans ton domaine (ajuste si besoin)
-    resp.headers["Content-Security-Policy"] = "frame-ancestors 'self' https://jojont.fr"
+    resp.headers["Content-Security-Policy"] = f"frame-ancestors {FRAME_ANCESTORS}"
     return resp
 
 
