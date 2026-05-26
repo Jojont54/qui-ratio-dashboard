@@ -432,6 +432,28 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(client["initial_sync_mode"], "add")
         self.assertTrue(client["sync_pending"])
 
+    def test_direct_torrent_client_credentials_and_rpc_path_are_stored(self):
+        client_id = database.add_torrent_client(
+            "Transmission",
+            "http://transmission",
+            "9091",
+            "",
+            "",
+            "replace",
+            "TRANSMISSION",
+            "user",
+            "secret",
+            "/transmission/rpc",
+        )
+
+        client = database.list_torrent_clients()[0]
+        self.assertEqual(client["id"], client_id)
+        self.assertEqual(client["client_type"], "TRANSMISSION")
+        self.assertEqual(client["username"], "user")
+        self.assertEqual(client["password"], "secret")
+        self.assertEqual(client["rpc_path"], "/transmission/rpc")
+        self.assertEqual(client["instance_id"], "")
+
     def test_replacing_client_values_can_clear_only_selected_tracker_buffers(self):
         first = database.create_tracker("Premier")
         second = database.create_tracker("Second")

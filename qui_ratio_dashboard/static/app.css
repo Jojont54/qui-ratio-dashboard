@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; color: var(--text); background: var(--bg); }
 h1, h2, p { margin: 0; }
 h1 { font-size: 28px; margin-bottom: 7px; }

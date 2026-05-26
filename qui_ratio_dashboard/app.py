@@ -22,6 +22,7 @@ from .database import (
     update_torrent_client,
     update_trackers,
 )
+from .direct_clients import configured_client as build_torrent_client
 from .qui_client import QuiClient
 from .formatters import aggregate_tracker_rows, compute_domain_rows, fmt_bytes
 from .state_store import apply_domain_ledger
@@ -55,12 +56,7 @@ def _refresh_rows_locked():
     errors = []
     for configured_client in configured_clients:
         try:
-            client = QuiClient(
-                configured_client["base_url"],
-                configured_client["api_key"],
-                configured_client["instance_id"],
-                options["http_timeout_seconds"],
-            )
+            client = build_torrent_client(configured_client, options["http_timeout_seconds"])
             client_rows = compute_domain_rows(client.fetch_torrents_summary())
             for row in client_rows:
                 row["ledger_key"] = f"client:{configured_client['id']}:{row['domain']}"
@@ -123,20 +119,6 @@ def homarr_session_ok(options) -> bool:
         return False
 
 
-@app.before_request
-def require_homarr_auth():
-    options = get_app_options()
-    if not options["homarr_auth_enabled"]:
-        return
-
-    # Autorise un healthcheck (pratique pour debug / monitoring)
-    if request.path == "/health":
-        return
-
-    if not homarr_session_ok(options):
-        abort(401)
-
-
 @app.after_request
 def add_headers(resp):
     ancestors = ["'self'"]
@@ -168,8 +150,11 @@ def api_ratios():
 @app.get("/widget")
 @app.get("/iframe")
 def iframe():
-    if not get_app_options()["iframe_enabled"]:
+    options = get_app_options()
+    if not options["iframe_enabled"]:
         abort(404)
+    if options["homarr_auth_enabled"] and not homarr_session_ok(options):
+        abort(401)
     rows = refresh_rows()
     rows = [row for row in rows if row.get("widget_visible", True)]
     return render_template("widget.html", rows=rows, fmt_bytes=fmt_bytes, infinity=math.inf)
@@ -269,8 +254,12 @@ def add_client():
         request.form.get("address", ""),
         request.form.get("port", ""),
         request.form.get("api_key", ""),
-        request.form.get("instance_id", "1"),
+        request.form.get("instance_id", ""),
         request.form.get("initial_sync_mode", "preserve"),
+        request.form.get("client_type", "QUI"),
+        request.form.get("username", ""),
+        request.form.get("password", ""),
+        request.form.get("rpc_path", ""),
     )
     return redirect(url_for("torrent_clients"))
 
@@ -289,10 +278,53 @@ def update_client(client_id):
         request.form.get("address", ""),
         request.form.get("port", ""),
         request.form.get("api_key", ""),
-        request.form.get("instance_id", "1"),
+        request.form.get("instance_id", ""),
         request.form.get("initial_sync_mode", ""),
+        request.form.get("client_type", "QUI"),
+        request.form.get("username", ""),
+        request.form.get("password", ""),
+        request.form.get("rpc_path", ""),
     )
     return redirect(url_for("torrent_clients"))
+
+
+def _form_client_configuration():
+    address = request.form.get("address", "").strip().rstrip("/")
+    port = request.form.get("port", "").strip()
+    if not address.startswith(("http://", "https://")):
+        address = f"http://{address}"
+    base_url = f"{address}:{port}" if port else address
+    client_id = request.form.get("client_id", "").strip()
+    current = get_torrent_client(client_id) if client_id.isdigit() else {}
+    return {
+        "client_type": request.form.get("client_type", "QUI"),
+        "base_url": base_url,
+        "api_key": request.form.get("api_key", "").strip() or current.get("api_key", ""),
+        "instance_id": request.form.get("instance_id", "").strip() or current.get("instance_id", "1"),
+        "username": request.form.get("username", "").strip(),
+        "password": request.form.get("password", "") or current.get("password", ""),
+        "rpc_path": request.form.get("rpc_path", "").strip(),
+    }
+
+
+@app.post("/clients/test")
+def test_torrent_client_connection():
+    configuration = _form_client_configuration()
+    if not request.form.get("address", "").strip():
+        return jsonify({"error": "Adresse requise."}), 400
+    try:
+        client = build_torrent_client(configuration, get_app_options()["http_timeout_seconds"])
+        if configuration["client_type"].upper() == "QUI":
+            instances = client.list_instances()
+            return jsonify({"message": f"{len(instances)} instance(s) QUI disponible(s)."})
+        payload = client.fetch_torrents_summary()
+        transfers = payload.get("counts", {}).get("trackerTransfers", {})
+        count = sum(int(transfer.get("count", 0)) for transfer in transfers.values())
+        return jsonify(
+            {"message": f"Connexion reussie : {count} torrent(s), {len(transfers)} tracker(s)."}
+        )
+    except Exception as error:
+        return jsonify({"error": f"Connexion impossible : {error}"}), 400
 
 
 @app.post("/clients/qui/instances")

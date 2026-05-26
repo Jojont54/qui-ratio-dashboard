@@ -33,7 +33,7 @@
     <div class="option-row homarr-auth-row">
       <div>
         <strong>Authentification Homarr</strong>
-        <p>Verifie la session Homarr avant d'autoriser l'acces a l'application.</p>
+        <p>Verifie la session Homarr uniquement avant d'afficher l'iFrame.</p>
       </div>
       <label class="switch" aria-label="Activer l'authentification Homarr">
         <input type="checkbox" name="homarr_auth_enabled" {% if options.homarr_auth_enabled %}checked{% endif %}>
@@ -49,7 +49,7 @@
         Chemin de session
         <input name="homarr_session_endpoint" value="{{ options.homarr_session_endpoint }}" placeholder="/api/auth/session">
       </label>
-      <p class="option-help">Activez uniquement apres avoir verifie l'adresse Homarr : une session Homarr valide sera requise pour revenir dans l'application.</p>
+      <p class="option-help">Activez uniquement apres avoir verifie l'adresse Homarr : une session Homarr valide sera requise pour afficher <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
     </div>
     <div class="options-divider"></div>
     <div class="panel-heading option-heading">

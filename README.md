@@ -1,8 +1,7 @@
 ## qui-ratio-dashboard
 
-Self-hosted tracker ratio dashboard currently powered by QUI, with a compact
-Homarr widget and the first management screens for a larger multi-client
-application.
+Self-hosted tracker ratio dashboard powered by QUI or direct torrent client
+connections, with a compact Homarr widget and multi-client management screens.
 
 The dashboard preserves totals from torrents removed from QUI. It records
 visible decreases in `/data/state.json` and carries them into later totals, so
@@ -22,8 +21,8 @@ without a direct tracker API.
 - `/`: full dashboard interface.
 - `/trackers`: select detected domains, link them to a common display
   name, and manage visibility and buffers.
-- `/clients`: add or remove QUI connections and select the qBittorrent
-  instance exposed by each QUI server.
+- `/clients`: add, test, edit or remove QUI, qBittorrent, Transmission,
+  Deluge and rTorrent connections.
 - `/options`: enable or disable the Homarr iFrame endpoint.
 - `/iframe` or `/widget`: compact read-only iFrame, compatible with Homarr.
 
@@ -43,9 +42,13 @@ are not deleted when a database already contains tracker configuration.
 If an old Docker Compose file still mounts these YAML files read-only, the
 import succeeds but removal waits until that obsolete mount is removed.
 
-QUI servers are configured from the Clients torrent screen with the `+`
-button: enter the QUI address, port and API key, load its available qBittorrent
-instances, then select the instance whose transfer totals should be collected.
+Clients are configured from the Clients torrent screen with the `+` button.
+QUI connections load the available qBittorrent instances as before. Direct
+qBittorrent, Transmission, Deluge and rTorrent connections read torrent
+counters from their APIs, aggregate them by tracker and feed the same
+dashboard calculation previously supplied by QUI. Transmission and rTorrent
+accept their RPC path; Deluge uses its Web API and can optionally connect a
+configured daemon id.
 Existing connections can be edited without re-entering the API key, or deleted
 from their card. Totals from all configured clients are consolidated by
 tracker. When a connection is created or deliberately reinitialized, choose
@@ -55,13 +58,19 @@ instance, or erase stored tracker values and replace them with the client's
 current totals. This choice is required for a new connection so a first client
 is not mistaken for a repaired connection.
 
+The direct-client collector operates per torrent before grouping totals by
+tracker. It already accepts upload/download factors per torrent, so a future
+Prowlarr, Sonarr or Radarr integration can mark a hash as freeleech,
+silverleech or double upload without rewriting the dashboard aggregation.
+
 The Options screen can disable the compact iFrame globally. When disabled,
 `/iframe` and its compatibility alias `/widget` are unavailable, while saved
 per-tracker iFrame visibility is retained for a later reactivation.
 
 Homarr authentication is also configured from Options: enable it, provide
 the Homarr address and its session endpoint, then save. Once enabled, a valid
-Homarr session is required to access the application.
+Homarr session is required only to display `/iframe` or `/widget`; the main
+application remains accessible directly.
 
 The Options screen also controls background collection and API timeout. The
 automatic refresh is enabled by default and runs every 60 minutes; both its
