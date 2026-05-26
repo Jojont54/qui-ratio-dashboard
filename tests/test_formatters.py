@@ -224,22 +224,22 @@ class TrackerVisibilityTests(unittest.TestCase):
         self.assertEqual(rows[0]["downloaded"], 15)
 
     def test_parent_and_subdomain_from_different_clients_are_one_dashboard_row(self):
-        database.load_tracker_configuration(["abn.lol", "tracker.abn.lol"])
-        database.group_domains(["abn.lol", "tracker.abn.lol"], "ABN")
+        database.load_tracker_configuration(["example.test", "tracker.example.test"])
+        database.group_domains(["example.test", "tracker.example.test"], "Sample Tracker")
 
         rows = formatters.aggregate_tracker_rows(
             [
                 {
-                    "_key": "tracker.abn.lol",
-                    "domain": "tracker.abn.lol",
+                    "_key": "tracker.example.test",
+                    "domain": "tracker.example.test",
                     "uploaded": 100,
                     "downloaded": 20,
                     "count": 1,
                     "total_size": 300,
                 },
                 {
-                    "_key": "abn.lol",
-                    "domain": "abn.lol",
+                    "_key": "example.test",
+                    "domain": "example.test",
                     "uploaded": 50,
                     "downloaded": 10,
                     "count": 2,
@@ -247,7 +247,7 @@ class TrackerVisibilityTests(unittest.TestCase):
                 },
             ]
         )
-        row = next(row for row in rows if row["tracker"] == "ABN")
+        row = next(row for row in rows if row["tracker"] == "Sample Tracker")
         self.assertEqual(row["uploaded"], 150)
         self.assertEqual(row["downloaded"], 30)
         self.assertEqual(row["count"], 3)
