@@ -5,7 +5,7 @@
 <header class="page-header">
   <div>
     <h1>Options</h1>
-    <p>Reglages generaux de l'application.</p>
+    <p>Réglages généraux de l'application.</p>
   </div>
 </header>
 
@@ -26,15 +26,15 @@
         </label>
       </div>
       <div class="option-state">
-        Etat actuel :
+        État actuel :
         <strong class="{% if options.iframe_enabled %}enabled{% else %}disabled{% endif %}">
-          {% if options.iframe_enabled %}Activee{% else %}Desactivee{% endif %}
+          {% if options.iframe_enabled %}Activée{% else %}Désactivée{% endif %}
         </strong>
       </div>
       <div class="option-row homarr-auth-row">
         <div>
           <strong>Authentification Homarr</strong>
-          <p>Verifie la session Homarr uniquement avant d'afficher l'iFrame.</p>
+          <p>Vérifie la session Homarr uniquement avant d'afficher l'iFrame.</p>
         </div>
         <label class="switch" aria-label="Activer l'authentification Homarr">
           <input type="checkbox" name="homarr_auth_enabled" {% if options.homarr_auth_enabled %}checked{% endif %}>
@@ -50,7 +50,7 @@
           Chemin de session
           <input name="homarr_session_endpoint" value="{{ options.homarr_session_endpoint }}" placeholder="/api/auth/session">
         </label>
-        <p class="option-help">Activez uniquement apres avoir verifie l'adresse Homarr : une session Homarr valide sera requise pour afficher <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
+        <p class="option-help">Activez uniquement après avoir vérifié l'adresse Homarr : une session Homarr valide sera requise pour afficher <span class="code-path">/iframe</span> ou <span class="code-path">/widget</span>.</p>
       </div>
     </article>
     <article class="panel option-card">
@@ -59,8 +59,8 @@
       </div>
       <div class="option-row">
         <div>
-          <strong>Detection automatique des evenements</strong>
-          <p>A l'apparition d'un nouveau torrent, consulte l'historique Prowlarr pour detecter freeleech, silverleech ou double upload.</p>
+          <strong>Détection automatique des événements</strong>
+          <p>À l'apparition d'un nouveau torrent, consulte l'historique Prowlarr pour détecter freeleech, silverleech ou double upload.</p>
         </div>
         <label class="switch" aria-label="Activer Prowlarr">
           <input type="checkbox" name="prowlarr_enabled" {% if options.prowlarr_enabled %}checked{% endif %}>
@@ -73,46 +73,46 @@
           <input name="prowlarr_base_url" value="{{ options.prowlarr_base_url }}" placeholder="http://prowlarr:9696">
         </label>
         <label>
-          Cle API Prowlarr
-          <input type="password" name="prowlarr_api_key" placeholder="{% if options.prowlarr_api_key_hint %}Conservee : {{ options.prowlarr_api_key_hint }}{% else %}Cle API{% endif %}" autocomplete="off">
+          Clé API Prowlarr
+          <input type="password" name="prowlarr_api_key" placeholder="{% if options.prowlarr_api_key_hint %}Conservée : {{ options.prowlarr_api_key_hint }}{% else %}Clé API{% endif %}" autocomplete="off">
         </label>
         <div class="instance-discovery">
           <button class="button secondary" id="test-prowlarr" type="button">Tester la connexion</button>
-          <span class="instance-status" id="prowlarr-status">Verifiez les parametres avant de sauver.</span>
+          <span class="instance-status" id="prowlarr-status">Vérifiez les paramètres avant de sauver.</span>
         </div>
-        <p class="option-help">Incompatible avec QUI : QUI transmet deja des totaux groupes sans hash de torrent. Pour qBittorrent, Transmission et Deluge, seuls les torrents ajoutes depuis le dernier intervalle de collecte sont verifies. Avec rTorrent, la date d'ajout n'etant pas fiable, Prowlarr est interroge uniquement lorsqu'un torrent apparait pour la premiere fois dans l'application. Dans tous les cas, le grab doit etre present dans l'historique Prowlarr.</p>
+        <p class="option-help">Incompatible avec QUI : QUI transmet déjà des totaux groupés sans hash de torrent. Pour qBittorrent, Transmission et Deluge, seuls les torrents ajoutés depuis le dernier intervalle de collecte sont vérifiés. Avec rTorrent, la date d'ajout n'étant pas fiable, Prowlarr est interrogé uniquement lorsqu'un torrent apparaît pour la première fois dans l'application. Dans tous les cas, le grab doit être présent dans l'historique Prowlarr.</p>
       </div>
     </article>
     <article class="panel option-card">
       <div class="panel-heading">
         <h2>Collecte</h2>
       </div>
-      <p class="option-card-intro">La collecte automatique est toujours active, meme lorsque le dashboard n'est pas ouvert.</p>
+      <p class="option-card-intro">La collecte automatique est toujours active, même lorsque le dashboard n'est pas ouvert.</p>
       <div class="runtime-settings">
         <label>
-          Frequence de rafraichissement (minutes)
+          Fréquence de rafraîchissement (minutes)
           <input type="number" name="refresh_interval_minutes" min="1" step="1" value="{{ options.refresh_interval_minutes }}" required>
         </label>
         <label>
-          Delai maximum des API (secondes)
+          Délai maximum des API (secondes)
           <input type="number" name="http_timeout_seconds" min="1" step="1" value="{{ options.http_timeout_seconds }}" required>
         </label>
-        <p class="option-help">La frequence minimale acceptee est d'une minute. Le changement est applique des la sauvegarde.</p>
+        <p class="option-help">La fréquence minimale acceptée est d'une minute. Le changement est appliqué dès la sauvegarde.</p>
       </div>
       <div class="sync-action">
         <button class="button secondary sync-button" id="sync-now" type="button">
           <span class="sync-spinner" aria-hidden="true"></span>
           <span id="sync-label">Synchroniser maintenant</span>
         </button>
-        <span class="instance-status" id="sync-status">Utilise les reglages actuellement sauvegardes.</span>
+        <span class="instance-status" id="sync-status">Utilise les réglages actuellement sauvegardés.</span>
       </div>
     </article>
     <article class="panel option-card security-card">
       <div class="panel-heading">
-        <h2>Securite</h2>
+        <h2>Sécurité</h2>
       </div>
-      <p>L'application principale n'integre pas de connexion utilisateur et conserve les acces aux clients torrent et a Prowlarr. Ne l'exposez pas directement sur Internet : utilisez un reseau prive ou une authentification en amont.</p>
-      <p class="option-help">L'authentification Homarr ci-dessus protege uniquement l'iFrame.</p>
+      <p>L'application principale n'intègre pas de connexion utilisateur et conserve les accès aux clients torrent et à Prowlarr. Ne l'exposez pas directement sur Internet : utilisez un réseau privé ou une authentification en amont.</p>
+      <p class="option-help">L'authentification Homarr ci-dessus protège uniquement l'iFrame.</p>
     </article>
     <div class="global-save">
       <button class="button" type="submit">Sauver les options</button>
@@ -147,7 +147,7 @@
       syncButton.disabled = true;
       syncButton.classList.add("is-syncing");
       syncLabel.textContent = "Synchronisation...";
-      syncStatus.textContent = "Collecte des donnees en cours.";
+      syncStatus.textContent = "Collecte des données en cours.";
       try {
         const response = await fetch("{{ url_for('sync_now') }}", { method: "POST" });
         const payload = await response.json();

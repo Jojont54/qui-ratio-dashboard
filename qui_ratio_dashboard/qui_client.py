@@ -9,7 +9,7 @@ class QuiClient:
         if not self.base_url:
             raise RuntimeError("Adresse QUI requise")
         if not self.api_key:
-            raise RuntimeError("Cle API QUI requise")
+            raise RuntimeError("Clé API QUI requise")
         self.headers = {"x-api-key": self.api_key}
 
     def fetch_torrents_summary(self) -> dict:

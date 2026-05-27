@@ -86,7 +86,7 @@ class ProwlarrClient:
         self.api_key = str(api_key or "").strip()
         self.timeout = float(timeout)
         if not self.base_url or not self.api_key:
-            raise RuntimeError("Adresse et cle API Prowlarr requises")
+            raise RuntimeError("Adresse et clé API Prowlarr requises")
         self.headers = {"X-Api-Key": self.api_key}
 
     def test_connection(self):
@@ -128,7 +128,7 @@ class ProwlarrClient:
                 else {
                     "upload_multiplier": 1,
                     "download_multiplier": 1,
-                    "label": "Non trouve dans Prowlarr",
+                    "label": "Non trouvé dans Prowlarr",
                     "source": "prowlarr-miss",
                 }
             )
