@@ -315,8 +315,8 @@ def save_tracker_settings():
                     "trackers.html",
                     trackers=list_trackers(),
                     save_error=(
-                        "Evenement non active : impossible de relever toutes les "
-                        "sources avant son demarrage. Reessayez lorsque les clients "
+                        "Événement non activé : impossible de relever toutes les "
+                        "sources avant son démarrage. Réessayez lorsque les clients "
                         f"sont disponibles. ({error})"
                     ),
                 ),
@@ -424,7 +424,7 @@ def test_torrent_client_connection():
         if client_id.isdigit():
             update_torrent_client_connection_status(int(client_id), True)
         return jsonify(
-            {"message": f"Connexion reussie : {count} torrent(s), {len(transfers)} tracker(s)."}
+            {"message": f"Connexion réussie : {count} torrent(s), {len(transfers)} tracker(s)."}
         )
     except Exception as error:
         if client_id.isdigit():
@@ -442,7 +442,7 @@ def discover_qui_instances():
         configured_client = get_torrent_client(client_id)
         api_key = configured_client["api_key"] if configured_client else ""
     if not address or not api_key:
-        return jsonify({"error": "Adresse et cle API requises."}), 400
+        return jsonify({"error": "Adresse et clé API requises."}), 400
     base_url = address.rstrip("/")
     if not base_url.startswith(("http://", "https://")):
         base_url = f"http://{base_url}"
@@ -499,7 +499,7 @@ def test_prowlarr_connection():
         ).test_connection()
     except Exception as error:
         return jsonify({"error": f"Connexion Prowlarr impossible : {error}"}), 400
-    return jsonify({"message": "Connexion Prowlarr reussie."})
+    return jsonify({"message": "Connexion Prowlarr réussie."})
 
 
 @app.post("/options/sync")
@@ -517,14 +517,14 @@ def sync_now():
         return jsonify(
             {
                 "message": (
-                    f"Synchronisation partielle : {len(rows)} tracker(s) mis a jour. "
+                    f"Synchronisation partielle : {len(rows)} tracker(s) mis à jour. "
                     "Source(s) indisponible(s) : "
                     + ", ".join(failed_clients)
                     + "."
                 )
             }
         )
-    return jsonify({"message": f"Synchronisation terminee : {len(rows)} tracker(s) mis a jour."})
+    return jsonify({"message": f"Synchronisation terminée : {len(rows)} tracker(s) mis à jour."})
 
 
 start_background_refresh()

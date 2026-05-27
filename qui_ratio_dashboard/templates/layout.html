@@ -22,7 +22,7 @@
     <div class="sidebar-note">
       <span class="sidebar-note-title">Sources actives</span>
       {% for client in sidebar_clients %}
-      <div class="sidebar-source{% if client.last_connection_success is sameas false %} failed{% endif %}"{% if client.last_connection_success is sameas false and client.last_connection_error %} title="Derniere synchronisation echouee : {{ client.last_connection_error }}"{% endif %}>
+      <div class="sidebar-source{% if client.last_connection_success is sameas false %} failed{% endif %}"{% if client.last_connection_success is sameas false and client.last_connection_error %} title="Dernière synchronisation échouée : {{ client.last_connection_error }}"{% endif %}>
         <strong>{{ client.name }}</strong>
         <span>{{ client.client_type }}</span>
       </div>

@@ -5,7 +5,7 @@
 <header class="page-header">
   <div>
     <h1>Trackers</h1>
-    <p>Selectionnez des adresses, reliez-les a un nom et reglez son affichage au meme endroit.</p>
+    <p>Sélectionnez des adresses, regroupez-les sous un nom et réglez leur affichage au même endroit.</p>
   </div>
 </header>
 
@@ -17,24 +17,24 @@
   <form id="group-form" method="post" action="{{ url_for('group_selected_domains') }}">
     <div class="link-toolbar">
       <div class="link-hint">
-        <strong>Lier des adresses</strong>
+        <strong>Regrouper des adresses</strong>
         <span>Cochez des lignes, puis utilisez Maj + clic pour une plage.</span>
       </div>
       <label class="target-field">
-        Nom destination
-        <input name="display_name" list="tracker-names" placeholder="Exemple : Tracker Prive" required>
+        Regrouper sous le nom
+        <input name="display_name" list="tracker-names" placeholder="Nom d'affichage" required>
       </label>
       <datalist id="tracker-names">
         {% for tracker in trackers %}
         <option value="{{ tracker.display_name }}">
         {% endfor %}
       </datalist>
-      <button class="icon-button" type="submit" title="Lier la selection" aria-label="Lier la selection">
+      <button class="icon-button" type="submit" title="Regrouper la sélection" aria-label="Regrouper la sélection">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M10 13a5 5 0 0 0 7.07.07l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.07-.07l-3 3a5 5 0 1 0 7.07 7.07l1.71-1.71M8 12h8"/>
         </svg>
       </button>
-      <button class="icon-button secondary-icon" type="submit" formaction="{{ url_for('unlink_selected_domains') }}" formnovalidate title="Delier la selection" aria-label="Delier la selection">
+      <button class="icon-button secondary-icon" type="submit" formaction="{{ url_for('unlink_selected_domains') }}" formnovalidate title="Délier la sélection" aria-label="Délier la sélection">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.5 8.5 6.93 6.93a5 5 0 0 0-7.07 7.07l3 3a5 5 0 0 0 6.72.32M15.5 15.5l1.57 1.57a5 5 0 0 0 7.07-7.07l-3-3a5 5 0 0 0-6.72-.32M3 3l18 18"/>
         </svg>
@@ -48,7 +48,7 @@
       {% set group_id = "tracker-" ~ loop.index0 %}
       <details class="tracker-settings">
         <summary>
-          <input class="group-checkbox" type="checkbox" data-group="{{ group_id }}" aria-label="Selectionner toutes les adresses de {{ tracker.display_name }}">
+          <input class="group-checkbox" type="checkbox" data-group="{{ group_id }}" aria-label="Sélectionner toutes les adresses de {{ tracker.display_name }}">
           <span class="settings-title">{{ tracker.display_name }}</span>
           <span class="settings-count">{{ tracker.domains|length }} adresse{% if tracker.domains|length > 1 %}s{% endif %}</span>
         </summary>
@@ -63,7 +63,7 @@
               <input name="upload__{{ tracker.key }}" value="{{ tracker.buffer_uploaded_text }}">
             </label>
             <label class="upload-event">
-              Evenement upload
+              Événement upload
               <select name="event_upload__{{ tracker.key }}">
                 <option value="1" {% if tracker.event_uploaded_multiplier == 1 %}selected{% endif %}>Normal (x1)</option>
                 <option value="2" {% if tracker.event_uploaded_multiplier == 2 %}selected{% endif %}>Double upload (x2)</option>
@@ -71,7 +71,7 @@
               </select>
             </label>
             <label class="upload-end">
-              Fin evenement (h)
+              Fin événement (h)
               <input type="number" min="0.1" step="0.1" name="event_upload_hours__{{ tracker.key }}" value="{{ tracker.event_uploaded_hours_remaining }}" placeholder="Sans fin">
               <input type="hidden" name="original_event_upload__{{ tracker.key }}" value="{{ tracker.event_uploaded_multiplier }}">
               <input type="hidden" name="original_event_upload_hours__{{ tracker.key }}" value="{{ tracker.event_uploaded_hours_remaining }}">
@@ -82,7 +82,7 @@
               <input name="download__{{ tracker.key }}" value="{{ tracker.buffer_downloaded_text }}">
             </label>
             <label class="download-event">
-              Evenement download
+              Événement download
               <select name="event_download__{{ tracker.key }}">
                 <option value="1" {% if tracker.event_downloaded_multiplier == 1 %}selected{% endif %}>Normal (x1)</option>
                 <option value="0.5" {% if tracker.event_downloaded_multiplier == 0.5 %}selected{% endif %}>Silverleech (x0.5)</option>
@@ -90,7 +90,7 @@
               </select>
             </label>
             <label class="download-end">
-              Fin evenement (h)
+              Fin événement (h)
               <input type="number" min="0.1" step="0.1" name="event_download_hours__{{ tracker.key }}" value="{{ tracker.event_downloaded_hours_remaining }}" placeholder="Sans fin">
               <input type="hidden" name="original_event_download__{{ tracker.key }}" value="{{ tracker.event_downloaded_multiplier }}">
               <input type="hidden" name="original_event_download_hours__{{ tracker.key }}" value="{{ tracker.event_downloaded_hours_remaining }}">
@@ -116,12 +116,12 @@
         </div>
       </details>
       {% else %}
-      <div class="empty">Les adresses apparaitront apres la premiere collecte.</div>
+      <div class="empty">Les adresses apparaîtront après la première collecte.</div>
       {% endfor %}
     </div>
     {% if trackers %}
     <div class="global-save">
-      <button class="button" type="submit">Sauver les reglages</button>
+      <button class="button" type="submit">Sauver les réglages</button>
     </div>
     {% endif %}
   </form>

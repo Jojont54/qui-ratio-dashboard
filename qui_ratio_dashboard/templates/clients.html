@@ -5,7 +5,7 @@
 <header class="page-header">
   <div>
     <h1>Clients torrent</h1>
-    <p>Connectez QUI, qBittorrent, Transmission, Deluge ou rTorrent pour reunir leurs statistiques.</p>
+    <p>Connectez QUI, qBittorrent, Transmission, Deluge ou rTorrent pour réunir leurs statistiques.</p>
   </div>
   <button class="button add-client-button" type="button" onclick="document.getElementById('add-client-dialog').showModal()" aria-label="Ajouter un client">+</button>
 </header>
@@ -44,7 +44,7 @@
         {% if client.client_type == "QUI" %}
         <dt>Instance</dt>
         <dd>#{{ client.instance_id }}</dd>
-        <dt>Cle API</dt>
+        <dt>Clé API</dt>
         <dd>{{ client.api_key_hint }}</dd>
         {% elif client.client_type == "DELUGE" and client.instance_id %}
         <dt>Daemon</dt>
@@ -62,11 +62,11 @@
         <dt>RPC</dt>
         <dd>{{ client.rpc_path }}</dd>
         {% endif %}
-        <dt>Depart</dt>
+        <dt>Départ</dt>
         <dd>
           {% if client.sync_pending %}En attente :
           {% endif %}
-          {% if client.initial_sync_mode == "replace" %}effacement{% elif client.initial_sync_mode == "add" %}ajout{% else %}reference conservee{% endif %}
+          {% if client.initial_sync_mode == "replace" %}effacement{% elif client.initial_sync_mode == "add" %}ajout{% else %}référence conservée{% endif %}
         </dd>
       </dl>
     </article>
@@ -100,8 +100,8 @@
           <input type="number" min="1" max="65535" name="port" value="{{ client.port }}" placeholder="7476">
         </label>
         <label data-client-types="QUI">
-          Cle API
-          <input type="password" name="api_key" placeholder="Laisser vide pour conserver la cle" autocomplete="off">
+          Clé API
+          <input type="password" name="api_key" placeholder="Laisser vide pour conserver la clé" autocomplete="off">
         </label>
         <label data-client-types="QBITTORRENT TRANSMISSION RTORRENT">
           Utilisateur
@@ -127,29 +127,29 @@
         </label>
         <label data-client-types="DELUGE">
           ID du daemon Deluge
-          <input name="instance_id" value="{{ client.instance_id }}" placeholder="Optionnel si deja connecte dans Deluge Web">
+          <input name="instance_id" value="{{ client.instance_id }}" placeholder="Optionnel si déjà connecté dans Deluge Web">
         </label>
         <div class="instance-discovery" data-client-types="QBITTORRENT TRANSMISSION DELUGE RTORRENT">
           <button class="button secondary test-client" type="button">Tester la connexion</button>
-          <span class="instance-status test-status">Verifiez les parametres avant de sauver.</span>
+          <span class="instance-status test-status">Vérifiez les paramètres avant de sauver.</span>
         </div>
         <fieldset class="sync-mode">
-          <legend>A la prochaine connexion</legend>
+          <legend>À la prochaine connexion</legend>
           <label class="radio-option">
             <input type="radio" name="initial_sync_mode" value="" checked>
             <span>Ne rien changer <small>Continue avec l'historique actuel.</small></span>
           </label>
           <label class="radio-option">
             <input type="radio" name="initial_sync_mode" value="replace">
-            <span>Effacer les valeurs stockees <small>Repart directement des valeurs envoyees par le client.</small></span>
+            <span>Effacer les valeurs stockées <small>Repart directement des valeurs envoyées par le client.</small></span>
           </label>
           <label class="radio-option">
             <input type="radio" name="initial_sync_mode" value="add">
-            <span>Ajouter aux valeurs stockees <small>Utile pour une seconde instance.</small></span>
+            <span>Ajouter aux valeurs stockées <small>Utile pour une seconde instance.</small></span>
           </label>
           <label class="radio-option">
             <input type="radio" name="initial_sync_mode" value="preserve">
-            <span>Conserver les valeurs stockees <small>Le premier releve sert de reference, sans changement immediat.</small></span>
+            <span>Conserver les valeurs stockées <small>Le premier relevé sert de référence, sans changement immédiat.</small></span>
           </label>
         </fieldset>
         <div class="dialog-actions">
@@ -159,7 +159,7 @@
       </form>
     </dialog>
     {% else %}
-    <div class="empty client-empty">Aucun client configure. Ajoutez une instance QUI pour commencer.</div>
+    <div class="empty client-empty">Aucun client configuré. Ajoutez une instance QUI pour commencer.</div>
     {% endfor %}
   </div>
 </section>
@@ -196,7 +196,7 @@
       <input type="number" min="1" max="65535" name="port" placeholder="7476">
     </label>
     <label data-client-types="QUI">
-      Cle API
+      Clé API
       <input type="password" name="api_key" required autocomplete="off">
     </label>
     <label data-client-types="QBITTORRENT TRANSMISSION RTORRENT">
@@ -223,25 +223,25 @@
     </label>
     <label data-client-types="DELUGE">
       ID du daemon Deluge
-      <input name="instance_id" placeholder="Optionnel si deja connecte dans Deluge Web">
+      <input name="instance_id" placeholder="Optionnel si déjà connecté dans Deluge Web">
     </label>
     <div class="instance-discovery" data-client-types="QBITTORRENT TRANSMISSION DELUGE RTORRENT">
       <button class="button secondary test-client" type="button">Tester la connexion</button>
-      <span class="instance-status test-status">Verifiez les parametres avant d'ajouter.</span>
+      <span class="instance-status test-status">Vérifiez les paramètres avant d'ajouter.</span>
     </div>
     <fieldset class="sync-mode">
-      <legend>Valeurs au premier releve (choix obligatoire)</legend>
+      <legend>Valeurs au premier relevé (choix obligatoire)</legend>
       <label class="radio-option">
         <input type="radio" name="initial_sync_mode" value="replace" required>
-        <span>Effacer les valeurs stockees <small>Affiche directement les valeurs envoyees par le client.</small></span>
+        <span>Effacer les valeurs stockées <small>Affiche directement les valeurs envoyées par le client.</small></span>
       </label>
       <label class="radio-option">
         <input type="radio" name="initial_sync_mode" value="add">
-        <span>Ajouter aux valeurs stockees <small>Utile quand cette instance s'ajoute aux autres.</small></span>
+        <span>Ajouter aux valeurs stockées <small>Utile quand cette instance s'ajoute aux autres.</small></span>
       </label>
       <label class="radio-option">
         <input type="radio" name="initial_sync_mode" value="preserve">
-        <span>Conserver les valeurs stockees <small>Recommande pour reparer une connexion ou apres migration.</small></span>
+        <span>Conserver les valeurs stockées <small>Recommandé pour réparer une connexion ou après migration.</small></span>
       </label>
     </fieldset>
     <div class="dialog-actions">
@@ -306,7 +306,7 @@
             select.appendChild(option);
           });
           if (payload.instances.length === 0) {
-            throw new Error("Aucune instance qBittorrent trouvee dans QUI.");
+            throw new Error("Aucune instance qBittorrent trouvée dans QUI.");
           }
           select.dataset.loaded = "true";
           select.disabled = false;

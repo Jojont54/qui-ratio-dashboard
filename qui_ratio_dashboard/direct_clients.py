@@ -142,7 +142,7 @@ class DelugeClient:
             raise RuntimeError("Authentification Deluge refusee")
         if not self._call("web.connected"):
             if not self.daemon_id:
-                raise RuntimeError("Aucun daemon Deluge connecte")
+                raise RuntimeError("Aucun daemon Deluge connecté")
             self._call("web.connect", [self.daemon_id])
         data = self._call(
             "core.get_torrents_status",

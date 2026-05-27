@@ -5,7 +5,7 @@
 <header class="page-header">
   <div>
     <h1>Dashboard</h1>
-    <p>Dernieres statistiques collectees pour les clients connectes.</p>
+    <p>Dernières statistiques collectées pour les clients connectés.</p>
   </div>
   {% if options.iframe_enabled %}
   <a class="button secondary" href="{{ url_for('iframe') }}" target="_blank">Ouvrir iFrame</a>
@@ -43,7 +43,7 @@
           <td>{{ fmt_bytes(row.total_size) }}</td>
         </tr>
         {% else %}
-        <tr><td class="empty" colspan="7">Aucune donnee collectee pour le moment.</td></tr>
+        <tr><td class="empty" colspan="7">Aucune donnée collectée pour le moment.</td></tr>
         {% endfor %}
       </tbody>
     </table>
