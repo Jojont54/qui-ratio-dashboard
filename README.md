@@ -88,6 +88,23 @@ the unavailable client's last values are preserved until it returns.
 Docker only exposes port `8787` and persists `/data`; no `.env` connection
 configuration is required anymore.
 
+## Docker images
+
+The `develop` branch publishes the rolling beta image:
+
+```yaml
+image: ghcr.io/jojont54/qui-ratio-dashboard:develop
+```
+
+Tagged beta releases publish a fixed image that will not change over time:
+
+```yaml
+image: ghcr.io/jojont54/qui-ratio-dashboard:beta-v0.1.0
+```
+
+Use the fixed tag for an installation you want to update manually, and
+`develop` when you want to follow each beta update.
+
 ## Security
 
 The main application is not protected by its own login and stores torrent
