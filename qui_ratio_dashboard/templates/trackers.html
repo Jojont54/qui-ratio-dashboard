@@ -19,6 +19,7 @@
       <div class="link-hint">
         <strong>Regrouper des adresses</strong>
         <span>Cochez des lignes, puis utilisez Maj + clic pour une plage.</span>
+        <span>Unités : T, TiB, TB, Tio et To utilisent tous la base binaire (1 TB = 1024 GB).</span>
       </div>
       <label class="target-field">
         Regrouper sous le nom
@@ -62,6 +63,10 @@
               Buffer upload
               <input name="upload__{{ tracker.key }}" value="{{ tracker.buffer_uploaded_text }}">
             </label>
+            <label class="upload-site">
+              Valeur site upload
+              <input name="site_upload__{{ tracker.key }}" placeholder="Facultatif">
+            </label>
             <label class="upload-event">
               Événement upload
               <select name="event_upload__{{ tracker.key }}">
@@ -80,6 +85,10 @@
             <label class="download-buffer">
               Buffer download
               <input name="download__{{ tracker.key }}" value="{{ tracker.buffer_downloaded_text }}">
+            </label>
+            <label class="download-site">
+              Valeur site download
+              <input name="site_download__{{ tracker.key }}" placeholder="Facultatif">
             </label>
             <label class="download-event">
               Événement download

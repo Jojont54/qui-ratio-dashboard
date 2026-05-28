@@ -28,6 +28,24 @@ def recent_torrent_hashes(transfers, max_age_seconds, current_time=None):
     return hashes
 
 
+def prowlarr_lookup_hashes(hashes, rules_by_hash, recent_hashes, max_attempts=3):
+    existing = rules_by_hash or {}
+    recent = set(recent_hashes or set())
+    checks = {
+        torrent_hash
+        for torrent_hash in hashes
+        if torrent_hash in recent and torrent_hash not in existing
+    }
+    checks.update(
+        torrent_hash
+        for torrent_hash, rule in existing.items()
+        if torrent_hash in recent
+        and rule.get("source") in {"detected", "prowlarr-miss"}
+        and int(rule.get("lookup_attempts", 0)) < max_attempts
+    )
+    return sorted(checks)
+
+
 def torrent_rows(transfers, rules_by_hash=None):
     rules_by_hash = rules_by_hash or {}
     rows = []

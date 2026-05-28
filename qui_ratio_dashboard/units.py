@@ -2,15 +2,45 @@ import re
 
 
 _SUFFIX = {
+    "B": 1,
+    "O": 1,
+    "K": 1024,
+    "KO": 1024,
+    "KB": 1024,
+    "KIO": 1024,
     "KIB": 1024,
+    "M": 1024**2,
+    "MO": 1024**2,
+    "MB": 1024**2,
+    "MIO": 1024**2,
     "MIB": 1024**2,
+    "G": 1024**3,
+    "GO": 1024**3,
+    "GB": 1024**3,
+    "GIO": 1024**3,
     "GIB": 1024**3,
+    "T": 1024**4,
+    "TO": 1024**4,
+    "TB": 1024**4,
+    "TIO": 1024**4,
     "TIB": 1024**4,
-    "KB": 1000,
-    "MB": 1000**2,
-    "GB": 1000**3,
-    "TB": 1000**4,
+    "P": 1024**5,
+    "PO": 1024**5,
+    "PB": 1024**5,
+    "PIO": 1024**5,
+    "PIB": 1024**5,
 }
+
+def has_byte_unit(value) -> bool:
+    if value is None or isinstance(value, (int, float)):
+        return False
+    text = str(value).strip()
+    if not text:
+        return False
+    match = re.match(
+        r"^[+-]?[0-9]+(?:[\.,][0-9]+)?\s*([A-Za-z]{1,4})$", text
+    )
+    return bool(match and match.group(1).upper() in _SUFFIX)
 
 
 def parse_bytes(value) -> int:
@@ -21,15 +51,17 @@ def parse_bytes(value) -> int:
     text = str(value).strip()
     if not text:
         return 0
-    match = re.match(r"^([+-]?[0-9]+(?:\.[0-9]+)?)\s*([A-Za-z]{2,4})$", text)
+    match = re.match(r"^([+-]?[0-9]+(?:[\.,][0-9]+)?)\s*([A-Za-z]{1,4})$", text)
     if not match:
         try:
             return int(text)
         except ValueError:
             return 0
-    number = float(match.group(1))
+    number = float(match.group(1).replace(",", "."))
     suffix = match.group(2).upper()
-    return int(number * _SUFFIX.get(suffix, 1))
+    if suffix not in _SUFFIX:
+        return 0
+    return int(number * _SUFFIX[suffix])
 
 
 def fmt_bytes(value: int) -> str:

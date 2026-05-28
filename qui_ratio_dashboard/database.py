@@ -69,6 +69,14 @@ def _updated_event_expiry(values, direction):
     return _expiry_from_hours(multiplier, hours)
 
 
+def _updated_buffer_text(values, direction):
+    target = str(values.get(f"{direction}_target", "")).strip()
+    if target:
+        raw_value = int(values.get(f"raw_{direction}", 0))
+        return fmt_bytes(parse_bytes(target) - raw_value)
+    return str(values.get(f"{direction}_add", "0 B")).strip() or "0 B"
+
+
 def _connect():
     directory = os.path.dirname(DATABASE_PATH)
     if directory:
@@ -712,7 +720,7 @@ def save_torrent_rules(client_id, rules):
                 label = excluded.label,
                 source = excluded.source,
                 lookup_attempts = torrent_rules.lookup_attempts + 1
-            WHERE torrent_rules.source = 'prowlarr-miss'
+            WHERE torrent_rules.source IN ('detected', 'prowlarr-miss')
             """,
             values,
         )
@@ -1179,6 +1187,8 @@ def update_trackers(updates):
     init_database()
     with _lock, _database() as connection:
         for key, values in updates.items():
+            uploaded_text = _updated_buffer_text(values, "uploaded")
+            downloaded_text = _updated_buffer_text(values, "downloaded")
             connection.execute(
                 """
                 UPDATE trackers
@@ -1193,10 +1203,10 @@ def update_trackers(updates):
                     str(values["display_name"]).strip() or key,
                     int(bool(values["visible_dashboard"])),
                     int(bool(values["visible_widget"])),
-                    parse_bytes(values["uploaded_add"]),
-                    parse_bytes(values["downloaded_add"]),
-                    str(values["uploaded_add"]).strip() or "0 B",
-                    str(values["downloaded_add"]).strip() or "0 B",
+                    parse_bytes(uploaded_text),
+                    parse_bytes(downloaded_text),
+                    uploaded_text,
+                    downloaded_text,
                     float(values.get("event_uploaded_multiplier", 1)),
                     float(values.get("event_downloaded_multiplier", 1)),
                     _updated_event_expiry(values, "uploaded"),

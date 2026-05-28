@@ -236,6 +236,32 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(updated["event_uploaded_multiplier"], 2)
         self.assertEqual(updated["event_downloaded_multiplier"], 0.5)
 
+    def test_website_values_recalculate_buffers_from_current_raw_totals(self):
+        database.load_tracker_configuration(["one.example"])
+        tracker = database.list_trackers()[0]
+
+        database.update_trackers(
+            {
+                tracker["key"]: {
+                    "display_name": "Site Synced",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "0",
+                    "downloaded_add": "0",
+                    "uploaded_target": "5 GiB",
+                    "downloaded_target": "2 GiB",
+                    "raw_uploaded": 3 * 1024**3,
+                    "raw_downloaded": 512 * 1024**2,
+                }
+            }
+        )
+
+        updated = database.list_trackers()[0]
+        self.assertEqual(updated["buffer_uploaded"], 2 * 1024**3)
+        self.assertEqual(updated["buffer_downloaded"], int(1.5 * 1024**3))
+        self.assertEqual(updated["buffer_uploaded_text"], "2.00 GiB")
+        self.assertEqual(updated["buffer_downloaded_text"], "1.50 GiB")
+
     def test_linking_all_domains_to_new_name_renames_existing_group(self):
         database.load_tracker_configuration(["one.example", "two.example"])
         database.group_domains(["one.example", "two.example"], "Old Name")
@@ -633,6 +659,33 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(rule["download_multiplier"], 0)
         self.assertEqual(rule["source"], "prowlarr")
         self.assertEqual(rule["lookup_attempts"], 2)
+
+    def test_detected_rule_can_be_replaced_by_prowlarr_when_checked_later(self):
+        client_id = database.add_torrent_client(
+            "qBittorrent", "http://qbit", "", "", "", "replace", "QBITTORRENT"
+        )
+        database.save_torrent_rule(
+            client_id,
+            "abc",
+            "tracker.example",
+            {"label": "Normal", "source": "detected"},
+        )
+        database.save_torrent_rule(
+            client_id,
+            "abc",
+            "tracker.example",
+            {
+                "upload_multiplier": 2,
+                "download_multiplier": 0,
+                "label": "Upload x2 + Freeleech",
+                "source": "prowlarr",
+            },
+        )
+
+        rule = database.get_torrent_rules(client_id, ["abc"])["abc"]
+        self.assertEqual(rule["download_multiplier"], 0)
+        self.assertEqual(rule["upload_multiplier"], 2)
+        self.assertEqual(rule["source"], "prowlarr")
 
     def test_many_detected_torrent_rules_can_be_saved_in_one_collection(self):
         client_id = database.add_torrent_client(
