@@ -26,11 +26,13 @@ from .database import (
     update_trackers,
 )
 from .direct_clients import configured_client as build_torrent_client
-from .collector import recent_torrent_hashes, torrent_rows
+from .collector import prowlarr_lookup_hashes, recent_torrent_hashes, torrent_rows
+from .diagnostics import log_event, short_hash
 from .prowlarr_client import ProwlarrClient
 from .qui_client import QuiClient
 from .formatters import aggregate_tracker_rows, compute_domain_rows, fmt_bytes
 from .state_store import apply_domain_ledger, stored_domain_rows
+from .units import has_byte_unit
 from .config import (
     PORT,
 )
@@ -49,6 +51,7 @@ def inject_sidebar_clients():
 
 
 def refresh_rows(require_all_clients=False):
+    log_event("refresh.lock.wait", require_all_clients=require_all_clients)
     with _refresh_lock:
         return _refresh_rows_locked(require_all_clients)
 
@@ -58,9 +61,43 @@ def cached_rows():
     return aggregate_tracker_rows(domain_rows, legacy_adjustments)
 
 
+def _raw_totals_by_tracker():
+    totals = {}
+    for row in cached_rows():
+        totals[row["_key"]] = {
+            "uploaded": int(row["uploaded"]) - int(row.get("manual_buffer_uploaded", 0)),
+            "downloaded": int(row["downloaded"]) - int(row.get("manual_buffer_downloaded", 0)),
+        }
+    return totals
+
+
+def _missing_unit_message(updates):
+    labels = {
+        "uploaded_add": "Buffer upload",
+        "downloaded_add": "Buffer download",
+        "uploaded_target": "Valeur site upload",
+        "downloaded_target": "Valeur site download",
+    }
+    missing = []
+    for values in updates.values():
+        tracker_name = str(values.get("display_name") or "").strip()
+        for field, label in labels.items():
+            value = str(values.get(field, "")).strip()
+            if value and not has_byte_unit(value):
+                missing.append(f"{tracker_name} / {label}")
+    if not missing:
+        return ""
+    return "Unité manquante : ajoutez une unité comme GiB, Gio, Go, GB, G, TiB, Tio, To, TB ou T."
+
+
 def _refresh_rows_locked(require_all_clients=False):
     options = get_app_options()
     configured_clients = list_torrent_clients()
+    log_event(
+        "refresh.start",
+        clients=len(configured_clients),
+        require_all_clients=require_all_clients,
+    )
     pending_initializations = {
         client["id"]: client["initial_sync_mode"]
         for client in configured_clients
@@ -71,6 +108,12 @@ def _refresh_rows_locked(require_all_clients=False):
     errors = []
     for configured_client in configured_clients:
         try:
+            log_event(
+                "client.collect.start",
+                client=configured_client["name"],
+                client_type=configured_client["client_type"],
+                sync_pending=configured_client["sync_pending"],
+            )
             client = build_torrent_client(configured_client, options["http_timeout_seconds"])
             if configured_client["client_type"] == "QUI":
                 payload = client.fetch_torrents_summary()
@@ -100,27 +143,46 @@ def _refresh_rows_locked(require_all_clients=False):
                     recent_hashes = recent_torrent_hashes(
                         transfers, options["refresh_interval_seconds"]
                     )
-                    prowlarr_checks = sorted(
-                        (set(missing) & recent_hashes)
-                        | {
-                            torrent_hash
-                            for torrent_hash, rule in rules.items()
-                            if rule["source"] == "prowlarr-miss"
-                            and rule.get("lookup_attempts", 1) < 3
-                            and torrent_hash in recent_hashes
-                        }
-                    )
+                    prowlarr_checks = prowlarr_lookup_hashes(hashes, rules, recent_hashes)
+                    if prowlarr_checks:
+                        log_event(
+                            "prowlarr.lookup.start",
+                            client=configured_client["name"],
+                            client_type=configured_client["client_type"],
+                            count=len(prowlarr_checks),
+                            hashes=",".join(short_hash(value) for value in prowlarr_checks[:20]),
+                        )
                 if prowlarr_checks and options["prowlarr_enabled"]:
                     prowlarr = ProwlarrClient(
                         options["prowlarr_base_url"],
                         options["prowlarr_api_key"],
                         options["http_timeout_seconds"],
                     )
-                    new_rules.update(prowlarr.torrent_rules(prowlarr_checks))
+                    try:
+                        prowlarr_rules = prowlarr.torrent_rules(prowlarr_checks)
+                        new_rules.update(prowlarr_rules)
+                    except Exception as error:
+                        log_event(
+                            "prowlarr.lookup.error",
+                            client=configured_client["name"],
+                            error=str(error),
+                        )
+                        raise
                 rules_to_save = []
                 for transfer in transfers:
                     torrent_hash = str(transfer.get("hash", "")).strip().lower()
                     if torrent_hash in new_rules:
+                        rule = new_rules[torrent_hash]
+                        log_event(
+                            "torrent.rule.save",
+                            client=configured_client["name"],
+                            tracker=transfer.get("tracker", ""),
+                            hash=short_hash(torrent_hash),
+                            source=rule["source"],
+                            label=rule["label"],
+                            upload_multiplier=rule.get("upload_multiplier", 1),
+                            download_multiplier=rule.get("download_multiplier", 1),
+                        )
                         rules_to_save.append(
                             (
                                 torrent_hash,
@@ -145,11 +207,23 @@ def _refresh_rows_locked(require_all_clients=False):
             domain_rows.extend(client_rows)
             successful_clients.add(configured_client["id"])
             update_torrent_client_connection_status(configured_client["id"], True)
+            log_event(
+                "client.collect.success",
+                client=configured_client["name"],
+                client_type=configured_client["client_type"],
+                rows=len(client_rows),
+            )
         except Exception as error:
             update_torrent_client_connection_status(
                 configured_client["id"], False, error
             )
             errors.append(f"{configured_client['name']}: {error}")
+            log_event(
+                "client.collect.error",
+                client=configured_client["name"],
+                client_type=configured_client["client_type"],
+                error=str(error),
+            )
     domain_to_key, trackers = load_tracker_configuration(row["domain"] for row in domain_rows)
     domain_rows, legacy_adjustments, replaced_keys, initialized_clients = apply_domain_ledger(
         domain_rows,
@@ -164,9 +238,12 @@ def _refresh_rows_locked(require_all_clients=False):
     rows = aggregate_tracker_rows(domain_rows, legacy_adjustments)
     if errors:
         message = "Unable to collect some clients: " + "; ".join(errors)
+        log_event("refresh.partial", errors="; ".join(errors), rows=len(rows))
         app.logger.warning(message)
         if require_all_clients:
             raise RuntimeError(message)
+    else:
+        log_event("refresh.success", rows=len(rows))
     return rows
 
 
@@ -174,8 +251,10 @@ def refresh_periodically():
     while not _refresh_stop.is_set():
         options = get_app_options()
         try:
+            log_event("refresh.background.tick")
             refresh_rows()
         except Exception:
+            log_event("refresh.background.error")
             app.logger.exception("Background ratio refresh failed")
         _refresh_wake.wait(options["refresh_interval_seconds"])
         _refresh_wake.clear()
@@ -279,14 +358,20 @@ def save_tracker_settings():
     prefix = "display__"
     keys = [name[len(prefix):] for name in request.form if name.startswith(prefix)]
     current_settings = {tracker["key"]: tracker for tracker in list_trackers()}
+    raw_totals = _raw_totals_by_tracker()
     updates = {}
     for key in keys:
+        raw = raw_totals.get(key, {"uploaded": 0, "downloaded": 0})
         updates[key] = {
             "display_name": request.form.get(f"display__{key}", key),
             "visible_dashboard": request.form.get(f"dashboard__{key}") == "on",
             "visible_widget": request.form.get(f"widget__{key}") == "on",
             "uploaded_add": request.form.get(f"upload__{key}", "0"),
             "downloaded_add": request.form.get(f"download__{key}", "0"),
+            "uploaded_target": request.form.get(f"site_upload__{key}", ""),
+            "downloaded_target": request.form.get(f"site_download__{key}", ""),
+            "raw_uploaded": raw["uploaded"],
+            "raw_downloaded": raw["downloaded"],
             "event_uploaded_multiplier": request.form.get(f"event_upload__{key}", "1"),
             "event_downloaded_multiplier": request.form.get(f"event_download__{key}", "1"),
             "event_uploaded_hours_remaining": request.form.get(f"event_upload_hours__{key}", ""),
@@ -298,6 +383,16 @@ def save_tracker_settings():
             "original_event_uploaded_expires_at": request.form.get(f"original_event_upload_expires__{key}", ""),
             "original_event_downloaded_expires_at": request.form.get(f"original_event_download_expires__{key}", ""),
         }
+    missing_unit = _missing_unit_message(updates)
+    if missing_unit:
+        return (
+            render_template(
+                "trackers.html",
+                trackers=list_trackers(),
+                save_error=missing_unit,
+            ),
+            400,
+        )
     event_changed = any(
         float(values["event_uploaded_multiplier"])
         != current_settings.get(key, {}).get("event_uploaded_multiplier", 1)
@@ -323,20 +418,26 @@ def save_tracker_settings():
                 503,
             )
     update_trackers(updates)
+    log_event("trackers.settings.saved", count=len(updates))
     return redirect(url_for("trackers"))
 
 
 @app.post("/app/trackers/group")
 @app.post("/trackers/group")
 def group_selected_domains():
-    group_domains(request.form.getlist("domains"), request.form.get("display_name", ""))
+    domains = request.form.getlist("domains")
+    display_name = request.form.get("display_name", "")
+    group_domains(domains, display_name)
+    log_event("trackers.group", display_name=display_name, count=len(domains))
     return redirect(url_for("trackers"))
 
 
 @app.post("/app/trackers/unlink")
 @app.post("/trackers/unlink")
 def unlink_selected_domains():
-    unlink_domains(request.form.getlist("domains"))
+    domains = request.form.getlist("domains")
+    unlink_domains(domains)
+    log_event("trackers.unlink", count=len(domains))
     return redirect(url_for("trackers"))
 
 
@@ -347,42 +448,59 @@ def torrent_clients():
 
 @app.post("/clients/add")
 def add_client():
+    name = request.form.get("name", "QUI")
+    client_type = request.form.get("client_type", "QUI")
     add_torrent_client(
-        request.form.get("name", "QUI"),
+        name,
         request.form.get("address", ""),
         request.form.get("port", ""),
         request.form.get("api_key", ""),
         request.form.get("instance_id", ""),
         request.form.get("initial_sync_mode", "preserve"),
-        request.form.get("client_type", "QUI"),
+        client_type,
         request.form.get("username", ""),
         request.form.get("password", ""),
         request.form.get("rpc_path", ""),
+    )
+    log_event(
+        "client.added",
+        client=name,
+        client_type=client_type,
+        initial_sync_mode=request.form.get("initial_sync_mode", "preserve"),
     )
     return redirect(url_for("torrent_clients"))
 
 
 @app.post("/clients/<int:client_id>/delete")
 def delete_client(client_id):
+    client = get_torrent_client(client_id) or {}
     delete_torrent_client(client_id)
+    log_event(
+        "client.deleted",
+        client=client.get("name", client_id),
+        client_type=client.get("client_type", ""),
+    )
     return redirect(url_for("torrent_clients"))
 
 
 @app.post("/clients/<int:client_id>/update")
 def update_client(client_id):
+    name = request.form.get("name", "QUI")
+    client_type = request.form.get("client_type", "QUI")
     update_torrent_client(
         client_id,
-        request.form.get("name", "QUI"),
+        name,
         request.form.get("address", ""),
         request.form.get("port", ""),
         request.form.get("api_key", ""),
         request.form.get("instance_id", ""),
         request.form.get("initial_sync_mode", ""),
-        request.form.get("client_type", "QUI"),
+        client_type,
         request.form.get("username", ""),
         request.form.get("password", ""),
         request.form.get("rpc_path", ""),
     )
+    log_event("client.updated", client=name, client_type=client_type)
     return redirect(url_for("torrent_clients"))
 
 
@@ -412,23 +530,47 @@ def test_torrent_client_connection():
     if not request.form.get("address", "").strip():
         return jsonify({"error": "Adresse requise."}), 400
     try:
+        log_event(
+            "client.test.start",
+            client_type=configuration["client_type"],
+            client_id=client_id or "new",
+        )
         client = build_torrent_client(configuration, get_app_options()["http_timeout_seconds"])
         if configuration["client_type"].upper() == "QUI":
             instances = client.list_instances()
             if client_id.isdigit():
                 update_torrent_client_connection_status(int(client_id), True)
+            log_event(
+                "client.test.success",
+                client_type=configuration["client_type"],
+                client_id=client_id or "new",
+                instances=len(instances),
+            )
             return jsonify({"message": f"{len(instances)} instance(s) QUI disponible(s)."})
         payload = client.fetch_torrents_summary()
         transfers = payload.get("counts", {}).get("trackerTransfers", {})
         count = sum(int(transfer.get("count", 0)) for transfer in transfers.values())
         if client_id.isdigit():
             update_torrent_client_connection_status(int(client_id), True)
+        log_event(
+            "client.test.success",
+            client_type=configuration["client_type"],
+            client_id=client_id or "new",
+            torrents=count,
+            trackers=len(transfers),
+        )
         return jsonify(
             {"message": f"Connexion réussie : {count} torrent(s), {len(transfers)} tracker(s)."}
         )
     except Exception as error:
         if client_id.isdigit():
             update_torrent_client_connection_status(int(client_id), False, error)
+        log_event(
+            "client.test.error",
+            client_type=configuration["client_type"],
+            client_id=client_id or "new",
+            error=str(error),
+        )
         return jsonify({"error": f"Connexion impossible : {error}"}), 400
 
 
@@ -449,15 +591,18 @@ def discover_qui_instances():
     if port:
         base_url = f"{base_url}:{port}"
     try:
+        log_event("qui.instances.start", client_id=client_id or "new")
         instances = QuiClient(
             base_url, api_key, "1", get_app_options()["http_timeout_seconds"]
         ).list_instances()
     except Exception as error:
         if client_id.isdigit():
             update_torrent_client_connection_status(int(client_id), False, error)
+        log_event("qui.instances.error", client_id=client_id or "new", error=str(error))
         return jsonify({"error": f"Connexion QUI impossible : {error}"}), 400
     if client_id.isdigit():
         update_torrent_client_connection_status(int(client_id), True)
+    log_event("qui.instances.success", client_id=client_id or "new", instances=len(instances))
     return jsonify({"instances": instances})
 
 
@@ -483,6 +628,13 @@ def save_options():
         request.form.get("prowlarr_base_url", ""),
         prowlarr_api_key,
     )
+    log_event(
+        "options.saved",
+        iframe_enabled=request.form.get("iframe_enabled") == "on",
+        homarr_auth_enabled=request.form.get("homarr_auth_enabled") == "on",
+        prowlarr_enabled=request.form.get("prowlarr_enabled") == "on",
+        refresh_interval_minutes=request.form.get("refresh_interval_minutes", "60"),
+    )
     _refresh_wake.set()
     return redirect(url_for("options"))
 
@@ -492,21 +644,26 @@ def test_prowlarr_connection():
     current_options = get_app_options()
     api_key = request.form.get("prowlarr_api_key", "").strip() or current_options["prowlarr_api_key"]
     try:
+        log_event("prowlarr.test.start")
         ProwlarrClient(
             request.form.get("prowlarr_base_url", ""),
             api_key,
             current_options["http_timeout_seconds"],
         ).test_connection()
     except Exception as error:
+        log_event("prowlarr.test.error", error=str(error))
         return jsonify({"error": f"Connexion Prowlarr impossible : {error}"}), 400
+    log_event("prowlarr.test.success")
     return jsonify({"message": "Connexion Prowlarr réussie."})
 
 
 @app.post("/options/sync")
 def sync_now():
     try:
+        log_event("refresh.manual.start")
         rows = refresh_rows()
     except Exception as error:
+        log_event("refresh.manual.error", error=str(error))
         return jsonify({"error": f"Synchronisation impossible : {error}"}), 400
     failed_clients = [
         client["name"]
@@ -514,6 +671,11 @@ def sync_now():
         if client["last_connection_success"] is False
     ]
     if failed_clients:
+        log_event(
+            "refresh.manual.partial",
+            rows=len(rows),
+            failed_clients=", ".join(failed_clients),
+        )
         return jsonify(
             {
                 "message": (
@@ -524,6 +686,7 @@ def sync_now():
                 )
             }
         )
+    log_event("refresh.manual.success", rows=len(rows))
     return jsonify({"message": f"Synchronisation terminée : {len(rows)} tracker(s) mis à jour."})
 
 

@@ -67,6 +67,42 @@ class ProwlarrClientTests(unittest.TestCase):
         self.assertEqual(rules["b" * 40]["upload_multiplier"], 2)
         self.assertEqual(rules["c" * 40]["source"], "prowlarr-miss")
 
+    def test_history_prefers_special_rule_over_newer_normal_record(self):
+        response = Mock(
+            raise_for_status=Mock(),
+            json=lambda: {
+                "records": [
+                    {"data": {"downloadId": "a" * 40}},
+                    {"data": {"downloadId": "a" * 40, "indexerFlags": ["FreeLeech"]}},
+                ]
+            },
+        )
+        with patch.object(prowlarr_client.requests, "get", return_value=response):
+            rules = prowlarr_client.ProwlarrClient(
+                "http://prowlarr", "secret"
+            ).torrent_rules(["a" * 40])
+
+        self.assertEqual(rules["a" * 40]["download_multiplier"], 0)
+        self.assertEqual(rules["a" * 40]["label"], "Freeleech")
+
+    def test_connection_falls_back_to_apikey_query_parameter(self):
+        unauthorized = Mock(status_code=401, raise_for_status=Mock())
+        response = Mock(status_code=200, raise_for_status=Mock())
+
+        with patch.object(
+            prowlarr_client.requests,
+            "get",
+            side_effect=[unauthorized, response],
+        ) as get:
+            self.assertTrue(
+                prowlarr_client.ProwlarrClient(
+                    "http://prowlarr", "secret"
+                ).test_connection()
+            )
+
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_args.kwargs["params"]["apikey"], "secret")
+
 
 class ProwlarrAccountingSimulationTests(unittest.TestCase):
     def setUp(self):

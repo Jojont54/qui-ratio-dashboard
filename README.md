@@ -15,6 +15,14 @@ upload/download already shown by a tracker site but unavailable in QUI. The
 result matches activity observed by QUI after that baseline; activity
 completed and deleted between two dashboard reads cannot be reconstructed
 without a direct tracker API.
+Instead of calculating the buffer manually, enter the current tracker website
+upload/download value in Trackers and the app recalculates the matching buffer
+from the last collected total.
+Unit inputs are case-insensitive and accept common French and IEC variants such
+as `TiB`, `Tio`, `To`, `TB`, `T`, `GiB`, `Gio`, `Go`, `GB` and `G`; all of them
+are treated as binary units. Paste values directly from tracker sites, including
+decimal commas. If a unit is missing from a Trackers form value, the app asks
+for it before saving.
 
 ## Interface
 

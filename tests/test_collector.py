@@ -86,6 +86,20 @@ class CollectorTests(unittest.TestCase):
 
         self.assertEqual(candidates, {"new", "undated"})
 
+    def test_recent_detected_rules_are_checked_again_with_prowlarr(self):
+        candidates = collector.prowlarr_lookup_hashes(
+            ["known", "miss", "missing", "old"],
+            {
+                "known": {"source": "detected", "lookup_attempts": 1},
+                "miss": {"source": "prowlarr-miss", "lookup_attempts": 2},
+                "old": {"source": "detected", "lookup_attempts": 1},
+                "confirmed": {"source": "prowlarr", "lookup_attempts": 1},
+            },
+            {"known", "miss", "missing", "confirmed"},
+        )
+
+        self.assertEqual(candidates, ["known", "miss", "missing"])
+
 
 class DirectClientTests(unittest.TestCase):
     def test_qbittorrent_client_builds_tracker_summary(self):

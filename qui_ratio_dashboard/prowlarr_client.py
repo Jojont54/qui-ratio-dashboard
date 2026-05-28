@@ -2,6 +2,8 @@ import re
 
 import requests
 
+from .diagnostics import log_event, short_hash
+
 
 def _normalized_hash(value):
     match = re.search(r"(?<![a-fA-F0-9])[a-fA-F0-9]{32,64}(?![a-fA-F0-9])", str(value or ""))
@@ -80,6 +82,13 @@ def rule_from_history_record(record):
     }
 
 
+def _is_special_rule(rule):
+    return (
+        float(rule.get("upload_multiplier", 1)) != 1
+        or float(rule.get("download_multiplier", 1)) != 1
+    )
+
+
 class ProwlarrClient:
     def __init__(self, base_url, api_key, timeout=10.0):
         self.base_url = str(base_url or "").rstrip("/")
@@ -89,48 +98,86 @@ class ProwlarrClient:
             raise RuntimeError("Adresse et clé API Prowlarr requises")
         self.headers = {"X-Api-Key": self.api_key}
 
-    def test_connection(self):
+    def _get(self, path, params=None):
+        params = dict(params or {})
         response = requests.get(
-            f"{self.base_url}/api/v1/system/status",
+            f"{self.base_url}{path}",
             headers=self.headers,
+            params=params,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        if getattr(response, "status_code", None) in {401, 403}:
+            fallback_params = dict(params)
+            fallback_params["apikey"] = self.api_key
+            response = requests.get(
+                f"{self.base_url}{path}",
+                headers=self.headers,
+                params=fallback_params,
+                timeout=self.timeout,
+            )
+        return response
+
+    def test_connection(self):
+        response = self._get("/api/v1/system/status")
+        try:
+            response.raise_for_status()
+        except requests.RequestException as error:
+            status = getattr(response, "status_code", "")
+            detail = f"HTTP {status}" if status else str(error)
+            raise RuntimeError(f"Prowlarr ne répond pas correctement ({detail})") from error
         return True
 
     def torrent_rules(self, torrent_hashes):
         clean_hashes = [_normalized_hash(torrent_hash) for torrent_hash in torrent_hashes]
-        response = requests.get(
-            f"{self.base_url}/api/v1/history",
-            headers=self.headers,
+        response = self._get(
+            "/api/v1/history",
             params={
                 "page": 1,
                 "pageSize": 250,
                 "sortKey": "date",
                 "sortDirection": "descending",
             },
-            timeout=self.timeout,
         )
         response.raise_for_status()
         payload = response.json()
         records = payload.get("records", payload) if isinstance(payload, dict) else payload
         requested = set(clean_hashes)
-        records_by_hash = {}
+        rules_by_hash = {}
         for record in records or []:
+            rule = rule_from_history_record(record)
             for torrent_hash in _hashes_from_record(record) & requested:
-                records_by_hash.setdefault(torrent_hash, record)
+                current_rule = rules_by_hash.get(torrent_hash)
+                if current_rule is None or (
+                    not _is_special_rule(current_rule) and _is_special_rule(rule)
+                ):
+                    rules_by_hash[torrent_hash] = rule
+                    log_event(
+                        "prowlarr.history.match",
+                        hash=short_hash(torrent_hash),
+                        label=rule["label"],
+                        upload_multiplier=rule["upload_multiplier"],
+                        download_multiplier=rule["download_multiplier"],
+                    )
         rules = {}
         for clean_hash in clean_hashes:
-            matching = records_by_hash.get(clean_hash)
             rules[clean_hash] = (
-                rule_from_history_record(matching)
-                if matching is not None
+                rules_by_hash[clean_hash]
+                if clean_hash in rules_by_hash
                 else {
                     "upload_multiplier": 1,
                     "download_multiplier": 1,
                     "label": "Non trouvé dans Prowlarr",
                     "source": "prowlarr-miss",
                 }
+            )
+            rule = rules[clean_hash]
+            log_event(
+                "prowlarr.rule",
+                hash=short_hash(clean_hash),
+                source=rule["source"],
+                label=rule["label"],
+                upload_multiplier=rule["upload_multiplier"],
+                download_multiplier=rule["download_multiplier"],
             )
         return rules
 
