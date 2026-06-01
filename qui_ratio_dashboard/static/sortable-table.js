@@ -34,6 +34,12 @@
 
   document.querySelectorAll("table[data-sortable]").forEach((table) => {
     const headers = Array.from(table.querySelectorAll("thead th"));
+    const setIndicator = (header, value) => {
+      const indicator = header.querySelector(".sort-indicator");
+      if (indicator) {
+        indicator.textContent = value;
+      }
+    };
     headers.forEach((header, index) => {
       header.tabIndex = 0;
       header.classList.add("sortable-heading");
@@ -44,8 +50,10 @@
         headers.forEach((other) => {
           other.dataset.sortDirection = "";
           other.removeAttribute("aria-sort");
+          setIndicator(other, "↕");
         });
         header.dataset.sortDirection = nextDirection;
+        setIndicator(header, nextDirection === "asc" ? "↑" : "↓");
         header.setAttribute(
           "aria-sort",
           nextDirection === "asc" ? "ascending" : "descending"

@@ -48,9 +48,9 @@ p, .muted { color: var(--muted); }
 .data-table th { font-size: 12px; color: var(--muted); font-weight: 550; text-align: left; text-transform: uppercase; letter-spacing: .04em; padding: 0 14px 14px; }
 .data-table td { padding: 15px 14px; border-top: 1px solid var(--border); white-space: nowrap; }
 .sortable-heading { cursor: pointer; user-select: none; }
-.sortable-heading::after { content: "↕"; margin-left: 6px; color: var(--muted); font-size: 10px; }
-.sortable-heading[data-sort-direction="asc"]::after { content: "↑"; color: var(--accent); }
-.sortable-heading[data-sort-direction="desc"]::after { content: "↓"; color: var(--accent); }
+.sort-indicator { margin-left: 6px; color: var(--muted); font-size: 10px; }
+.sortable-heading[data-sort-direction="asc"] .sort-indicator,
+.sortable-heading[data-sort-direction="desc"] .sort-indicator { color: var(--accent); }
 .sortable-heading:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 .strong { font-weight: 600; }
 .ratio { font-weight: 650; }

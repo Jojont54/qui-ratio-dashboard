@@ -59,6 +59,19 @@
     .ratio.good { color: var(--widget-green); }
     .ratio.warn { color: var(--widget-yellow); }
     .ratio.danger { color: var(--widget-red); }
+    .sortable-heading {
+      cursor: pointer;
+      user-select: none;
+    }
+    .sort-indicator {
+      margin-left: 6px;
+      color: var(--widget-muted);
+      font-size: 10px;
+    }
+    .sortable-heading[data-sort-direction="asc"] .sort-indicator,
+    .sortable-heading[data-sort-direction="desc"] .sort-indicator {
+      color: #4da3ff;
+    }
     .empty {
       padding: 34px !important;
       color: var(--widget-muted);
@@ -72,7 +85,7 @@
     <table class="data-table" data-sortable>
       <thead>
         <tr>
-          <th data-sort-type="text">Tracker</th><th data-sort-type="number">Upload</th><th data-sort-type="number">Download</th><th data-sort-type="number">Ratio</th><th data-sort-type="number">Crédit</th><th data-sort-type="number">#</th><th data-sort-type="number">Total</th>
+          <th class="sortable-heading" data-sort-type="text" data-sort-direction="">Tracker <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Upload <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Download <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Ratio <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Crédit <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction=""># <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Total <span class="sort-indicator" aria-hidden="true">↕</span></th>
         </tr>
       </thead>
       <tbody>
