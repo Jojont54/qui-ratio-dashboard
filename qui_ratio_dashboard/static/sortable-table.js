@@ -36,8 +36,7 @@
     const headers = Array.from(table.querySelectorAll("thead th"));
     headers.forEach((header, index) => {
       header.tabIndex = 0;
-      header.classList.add("sortable-heading");
-      header.dataset.sortDirection = "";
+      header.dataset.sortDirection = header.dataset.sortDirection || "";
       const type = header.dataset.sortType || "text";
       const applySort = () => {
         const nextDirection = header.dataset.sortDirection === "asc" ? "desc" : "asc";
