@@ -63,6 +63,10 @@
       cursor: pointer;
       user-select: none;
     }
+    .sort-link {
+      color: inherit;
+      text-decoration: none;
+    }
     .sort-indicator {
       margin-left: 6px;
       color: var(--widget-muted);
@@ -80,12 +84,17 @@
   </style>
 </head>
 <body class="widget-body">
+  {% macro sort_header(key, label, type="number") -%}
+    {% set active = sort_key == key %}
+    {% set next_direction = "desc" if active and sort_direction == "asc" else "asc" %}
+    <th class="sortable-heading" data-sort-type="{{ type }}" data-sort-direction="{{ sort_direction if active else '' }}"><a class="sort-link" href="{{ url_for(request.endpoint, sort=key, direction=next_direction) }}">{{ label }} <span class="sort-indicator" aria-hidden="true">{% if active and sort_direction == "asc" %}↑{% elif active and sort_direction == "desc" %}↓{% else %}↕{% endif %}</span></a></th>
+  {%- endmacro %}
   <h1 class="widget-title">Tracker Ratios</h1>
   <div class="widget-table">
     <table class="data-table" data-sortable>
       <thead>
         <tr>
-          <th class="sortable-heading" data-sort-type="text" data-sort-direction="">Tracker <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Upload <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Download <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Ratio <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Crédit <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction=""># <span class="sort-indicator" aria-hidden="true">↕</span></th><th class="sortable-heading" data-sort-type="number" data-sort-direction="">Total <span class="sort-indicator" aria-hidden="true">↕</span></th>
+          {{ sort_header("tracker", "Tracker", "text") }}{{ sort_header("uploaded", "Upload") }}{{ sort_header("downloaded", "Download") }}{{ sort_header("ratio", "Ratio") }}{{ sort_header("credit", "Crédit") }}{{ sort_header("count", "#") }}{{ sort_header("total_size", "Total") }}
         </tr>
       </thead>
       <tbody>
@@ -105,6 +114,6 @@
       </tbody>
     </table>
   </div>
-  <script src="{{ url_for('static', filename='sortable-table.js') }}"></script>
+  {% include "sortable_table_script.html" %}
 </body>
 </html>

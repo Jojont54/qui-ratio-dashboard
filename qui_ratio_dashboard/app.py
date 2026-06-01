@@ -65,6 +65,21 @@ def cached_rows():
     )
 
 
+def _sort_rows(rows, sort_key="", direction="asc"):
+    keys = {
+        "tracker": lambda row: str(row["tracker"]).casefold(),
+        "uploaded": lambda row: int(row["uploaded"]),
+        "downloaded": lambda row: int(row["downloaded"]),
+        "ratio": lambda row: math.inf if row["ratio"] == math.inf else float(row["ratio"]),
+        "credit": lambda row: int(row["ratio_margin"]),
+        "count": lambda row: int(row["count"]),
+        "total_size": lambda row: int(row["total_size"]),
+    }
+    if sort_key not in keys:
+        return rows
+    return sorted(rows, key=keys[sort_key], reverse=direction == "desc")
+
+
 def _raw_totals_by_tracker():
     totals = {}
     for row in cached_rows():
@@ -334,7 +349,17 @@ def iframe():
         abort(401)
     rows = cached_rows()
     rows = [row for row in rows if row.get("widget_visible", True)]
-    return render_template("widget.html", rows=rows, fmt_bytes=fmt_bytes, infinity=math.inf)
+    sort_key = request.args.get("sort", "")
+    sort_direction = request.args.get("direction", "asc")
+    rows = _sort_rows(rows, sort_key, sort_direction)
+    return render_template(
+        "widget.html",
+        rows=rows,
+        fmt_bytes=fmt_bytes,
+        infinity=math.inf,
+        sort_key=sort_key,
+        sort_direction=sort_direction,
+    )
 
 
 @app.get("/app/")
@@ -342,12 +367,17 @@ def iframe():
 def dashboard():
     rows = cached_rows()
     rows = [row for row in rows if row.get("dashboard_visible", True)]
+    sort_key = request.args.get("sort", "")
+    sort_direction = request.args.get("direction", "asc")
+    rows = _sort_rows(rows, sort_key, sort_direction)
     return render_template(
         "dashboard.html",
         rows=rows,
         fmt_bytes=fmt_bytes,
         infinity=math.inf,
         options=get_app_options(),
+        sort_key=sort_key,
+        sort_direction=sort_direction,
     )
 
 
