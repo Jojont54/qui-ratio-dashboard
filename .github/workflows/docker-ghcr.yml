@@ -3,6 +3,7 @@ name: Build & Push Docker image (GHCR)
 on:
   push:
     branches: ["main", "develop"]
+    tags: ["beta-v*"]
   pull_request:
     branches: ["main", "develop"]
   workflow_dispatch:
