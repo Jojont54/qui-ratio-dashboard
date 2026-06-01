@@ -224,6 +224,7 @@ class DatabaseTests(unittest.TestCase):
                     "visible_widget": True,
                     "uploaded_add": "2 TiB",
                     "downloaded_add": "1 TiB",
+                    "minimum_ratio": "2.5",
                     "event_uploaded_multiplier": "2",
                     "event_downloaded_multiplier": "0.5",
                 }
@@ -233,6 +234,7 @@ class DatabaseTests(unittest.TestCase):
         updated = database.list_trackers()[0]
         self.assertEqual(updated["display_name"], "Renamed")
         self.assertEqual(updated["domains"], ["one.example"])
+        self.assertEqual(updated["minimum_ratio"], 2.5)
         self.assertEqual(updated["event_uploaded_multiplier"], 2)
         self.assertEqual(updated["event_downloaded_multiplier"], 0.5)
 
@@ -721,12 +723,15 @@ class DatabaseTests(unittest.TestCase):
             "/api/auth/session",
             "30",
             "25",
+            "50 GiB",
         )
 
         options = database.get_app_options()
         self.assertEqual(options["refresh_interval_seconds"], 1800)
         self.assertEqual(options["refresh_interval_minutes"], 30)
         self.assertEqual(options["http_timeout_seconds"], 25)
+        self.assertEqual(options["credit_warning_threshold"], 50 * 1024**3)
+        self.assertEqual(options["credit_warning_threshold_text"], "50 GiB")
 
     def test_obsolete_background_refresh_toggle_is_removed(self):
         database.init_database()

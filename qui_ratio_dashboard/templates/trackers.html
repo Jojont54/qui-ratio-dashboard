@@ -55,10 +55,16 @@
         </summary>
         <div class="settings-content">
           <div class="settings-fields">
-            <label class="settings-name">
-              Nom
-              <input name="display__{{ tracker.key }}" value="{{ tracker.display_name }}">
-            </label>
+            <div class="settings-identity">
+              <label>
+                Nom
+                <input name="display__{{ tracker.key }}" value="{{ tracker.display_name }}">
+              </label>
+              <label>
+                Ratio minimum
+                <input type="number" min="0.01" step="0.01" name="minimum_ratio__{{ tracker.key }}" value="{{ '%.2f'|format(tracker.minimum_ratio) }}">
+              </label>
+            </div>
             <label class="upload-buffer">
               Buffer upload
               <input name="upload__{{ tracker.key }}" value="{{ tracker.buffer_uploaded_text }}">

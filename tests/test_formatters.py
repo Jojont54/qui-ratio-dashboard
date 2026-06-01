@@ -67,6 +67,101 @@ class TrackerVisibilityTests(unittest.TestCase):
         self.assertFalse(rows["hidden"]["widget_visible"])
         self.assertTrue(rows["unknown.example"]["widget_visible"])
 
+    def test_ratio_credit_is_warn_near_minimum_ratio(self):
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "0",
+                    "downloaded_add": "0",
+                    "minimum_ratio": "2",
+                }
+            }
+        )
+
+        rows = formatters.aggregate_tracker_rows(
+            [
+                {
+                    "_key": "shown.example",
+                    "domain": "shown.example",
+                    "uploaded": 130,
+                    "downloaded": 60,
+                    "count": 1,
+                    "total_size": 1,
+                }
+            ],
+            credit_warning_threshold=10,
+        )
+
+        self.assertEqual(rows[0]["minimum_ratio"], 2)
+        self.assertEqual(rows[0]["ratio_margin"], 5)
+        self.assertEqual(rows[0]["ratio_margin_class"], "warn")
+        self.assertEqual(rows[0]["ratio_class"], "warn")
+
+    def test_ratio_credit_is_good_above_minimum_ratio_safety_band(self):
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "0",
+                    "downloaded_add": "0",
+                    "minimum_ratio": "2",
+                }
+            }
+        )
+
+        rows = formatters.aggregate_tracker_rows(
+            [
+                {
+                    "_key": "shown.example",
+                    "domain": "shown.example",
+                    "uploaded": 200,
+                    "downloaded": 60,
+                    "count": 1,
+                    "total_size": 1,
+                }
+            ]
+        )
+
+        self.assertEqual(rows[0]["ratio_margin"], 40)
+        self.assertEqual(rows[0]["ratio_margin_class"], "good")
+        self.assertEqual(rows[0]["ratio_class"], "good")
+
+    def test_ratio_and_credit_are_danger_well_below_minimum_ratio(self):
+        database.update_trackers(
+            {
+                self.shown: {
+                    "display_name": "Shown",
+                    "visible_dashboard": True,
+                    "visible_widget": True,
+                    "uploaded_add": "0",
+                    "downloaded_add": "0",
+                    "minimum_ratio": "2",
+                }
+            }
+        )
+
+        rows = formatters.aggregate_tracker_rows(
+            [
+                {
+                    "_key": "shown.example",
+                    "domain": "shown.example",
+                    "uploaded": 80,
+                    "downloaded": 60,
+                    "count": 1,
+                    "total_size": 1,
+                }
+            ]
+        )
+
+        self.assertEqual(rows[0]["ratio_margin"], -20)
+        self.assertEqual(rows[0]["ratio_margin_class"], "danger")
+        self.assertEqual(rows[0]["ratio_class"], "danger")
+
     def test_legacy_adjustment_is_included_after_aggregation(self):
         rows = formatters.aggregate_tracker_rows(
             [

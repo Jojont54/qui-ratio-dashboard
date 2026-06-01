@@ -1,0 +1,64 @@
+(() => {
+  const parseValue = (cell, type) => {
+    const raw = cell.dataset.sortValue;
+    if (type === "number") {
+      if (raw === "inf") {
+        return Number.POSITIVE_INFINITY;
+      }
+      const value = Number(raw);
+      return Number.isNaN(value) ? 0 : value;
+    }
+    return (raw || cell.textContent || "").trim().toLocaleLowerCase("fr");
+  };
+
+  const compare = (left, right, type) => {
+    if (type === "number") {
+      return left - right;
+    }
+    return left.localeCompare(right, "fr", { numeric: true, sensitivity: "base" });
+  };
+
+  const sortTable = (table, columnIndex, type, direction) => {
+    const tbody = table.tBodies[0];
+    const rows = Array.from(tbody.querySelectorAll("tr")).filter(
+      (row) => !row.querySelector(".empty")
+    );
+    rows.sort((leftRow, rightRow) => {
+      const left = parseValue(leftRow.cells[columnIndex], type);
+      const right = parseValue(rightRow.cells[columnIndex], type);
+      const result = compare(left, right, type);
+      return direction === "asc" ? result : -result;
+    });
+    rows.forEach((row) => tbody.appendChild(row));
+  };
+
+  document.querySelectorAll("table[data-sortable]").forEach((table) => {
+    const headers = Array.from(table.querySelectorAll("thead th"));
+    headers.forEach((header, index) => {
+      header.tabIndex = 0;
+      header.classList.add("sortable-heading");
+      header.dataset.sortDirection = "";
+      const type = header.dataset.sortType || "text";
+      const applySort = () => {
+        const nextDirection = header.dataset.sortDirection === "asc" ? "desc" : "asc";
+        headers.forEach((other) => {
+          other.dataset.sortDirection = "";
+          other.removeAttribute("aria-sort");
+        });
+        header.dataset.sortDirection = nextDirection;
+        header.setAttribute(
+          "aria-sort",
+          nextDirection === "asc" ? "ascending" : "descending"
+        );
+        sortTable(table, index, type, nextDirection);
+      };
+      header.addEventListener("click", applySort);
+      header.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          applySort();
+        }
+      });
+    });
+  });
+})();

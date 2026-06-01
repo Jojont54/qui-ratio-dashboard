@@ -9,6 +9,10 @@
   </div>
 </header>
 
+{% if save_error %}
+<div class="panel form-error">{{ save_error }}</div>
+{% endif %}
+
 <section class="options-panel">
   <form class="options-form" method="post" action="{{ url_for('save_options') }}">
     <article class="panel option-card">
@@ -92,12 +96,17 @@
         <label>
           Fréquence de rafraîchissement (minutes)
           <input type="number" name="refresh_interval_minutes" min="1" step="1" value="{{ options.refresh_interval_minutes }}" required>
+          <span class="field-help">La fréquence minimale acceptée est d'une minute.</span>
         </label>
         <label>
           Délai maximum des API (secondes)
           <input type="number" name="http_timeout_seconds" min="1" step="1" value="{{ options.http_timeout_seconds }}" required>
         </label>
-        <p class="option-help">La fréquence minimale acceptée est d'une minute. Le changement est appliqué dès la sauvegarde.</p>
+        <label>
+          Crédit minimum d'alerte
+          <input name="credit_warning_threshold" value="{{ options.credit_warning_threshold_text }}" placeholder="0 B" required>
+          <span class="field-help">Le crédit reste vert au-dessus de cette valeur, passe jaune entre 0 et ce seuil, puis rouge sous 0.</span>
+        </label>
       </div>
       <div class="sync-action">
         <button class="button secondary sync-button" id="sync-now" type="button">
