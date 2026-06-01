@@ -49,7 +49,36 @@ def combine_domain_rows(rows: list[dict]) -> list[dict]:
     return list(combined.values())
 
 
-def aggregate_tracker_rows(domain_rows, legacy_adjustments=None) -> list[dict]:
+def ratio_margin(uploaded, downloaded, minimum_ratio):
+    return int(uploaded / max(float(minimum_ratio), 0.01) - downloaded)
+
+
+def ratio_status_class(ratio, minimum_ratio):
+    threshold = max(float(minimum_ratio), 0.01)
+    if ratio == math.inf or ratio >= threshold * 1.1:
+        return "good"
+    if ratio >= threshold:
+        return "warn"
+    return "danger"
+
+
+def ratio_margin_class(value, warning_threshold=0):
+    if value >= 0:
+        return "warn" if value <= int(warning_threshold) else "good"
+    return "danger"
+
+
+def _credit_warning_threshold(value):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def aggregate_tracker_rows(
+    domain_rows, legacy_adjustments=None, credit_warning_threshold=0
+) -> list[dict]:
+    credit_warning_threshold = _credit_warning_threshold(credit_warning_threshold)
     legacy_adjustments = legacy_adjustments or {}
     domain_to_key, trackers = load_tracker_configuration(
         row.get("domain", row["_key"]) for row in domain_rows
@@ -93,6 +122,8 @@ def aggregate_tracker_rows(domain_rows, legacy_adjustments=None) -> list[dict]:
         displayed_u = totals["uploaded"] + manual_u
         displayed_d = totals["downloaded"] + manual_d
         ratio = (displayed_u / displayed_d) if displayed_d > 0 else math.inf
+        minimum_ratio = float(config.get("minimum_ratio", 1))
+        margin = ratio_margin(displayed_u, displayed_d, minimum_ratio)
         rows.append(
             {
                 "tracker": config.get("display", key),
@@ -105,7 +136,11 @@ def aggregate_tracker_rows(domain_rows, legacy_adjustments=None) -> list[dict]:
                 "manual_buffer_uploaded": manual_u,
                 "manual_buffer_downloaded": manual_d,
                 "delta": displayed_u - displayed_d,
+                "ratio_margin": margin,
+                "ratio_margin_class": ratio_margin_class(margin, credit_warning_threshold),
+                "minimum_ratio": minimum_ratio,
                 "ratio": ratio,
+                "ratio_class": ratio_status_class(ratio, minimum_ratio),
                 "count": totals["count"],
                 "total_size": totals["total_size"],
             }

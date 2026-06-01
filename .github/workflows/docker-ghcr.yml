@@ -68,4 +68,4 @@ jobs:
             ghcr.io/${{ steps.repo.outputs.owner }}/qui-ratio-dashboard:${{ github.sha }}
             ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/qui-ratio-dashboard:latest', steps.repo.outputs.owner) || '' }}
             ${{ github.ref == 'refs/heads/develop' && format('ghcr.io/{0}/qui-ratio-dashboard:develop', steps.repo.outputs.owner) || '' }}
-            ${{ startsWith(github.ref, 'refs/tags/beta-v') && format('ghcr.io/{0}/qui-ratio-dashboard:{1}', steps.repo.outputs.owner, github.ref_name) || '' }}
+            ${{ github.ref == 'refs/heads/develop' && format('ghcr.io/{0}/qui-ratio-dashboard:beta-v0.1.2', steps.repo.outputs.owner) || '' }}

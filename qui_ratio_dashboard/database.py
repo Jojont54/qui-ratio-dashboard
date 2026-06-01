@@ -146,6 +146,7 @@ def init_database():
                 buffer_downloaded INTEGER NOT NULL DEFAULT 0,
                 buffer_uploaded_text TEXT NOT NULL DEFAULT '0 B',
                 buffer_downloaded_text TEXT NOT NULL DEFAULT '0 B',
+                minimum_ratio REAL NOT NULL DEFAULT 1.0,
                 event_uploaded_multiplier REAL NOT NULL DEFAULT 1.0,
                 event_downloaded_multiplier REAL NOT NULL DEFAULT 1.0,
                 event_uploaded_expires_at TEXT,
@@ -191,6 +192,9 @@ def init_database():
         )
         _add_column_if_missing(
             connection, "trackers", "buffer_downloaded_text", "TEXT NOT NULL DEFAULT '0 B'"
+        )
+        _add_column_if_missing(
+            connection, "trackers", "minimum_ratio", "REAL NOT NULL DEFAULT 1.0"
         )
         _add_column_if_missing(
             connection, "trackers", "event_uploaded_multiplier", "REAL NOT NULL DEFAULT 1.0"
@@ -583,6 +587,8 @@ def get_app_options():
                 'homarr_session_endpoint',
                 'refresh_interval_seconds',
                 'http_timeout_seconds',
+                'credit_warning_threshold',
+                'credit_warning_threshold_text',
                 'prowlarr_enabled',
                 'prowlarr_base_url',
                 'prowlarr_api_key'
@@ -603,6 +609,12 @@ def get_app_options():
         "refresh_interval_seconds": refresh_interval_seconds,
         "refresh_interval_minutes": max(1, int(round(refresh_interval_seconds / 60))),
         "http_timeout_seconds": max(1.0, _stored_float(stored, "http_timeout_seconds", 10)),
+        "credit_warning_threshold": max(
+            0, _stored_int(stored, "credit_warning_threshold", 0)
+        ),
+        "credit_warning_threshold_text": stored.get(
+            "credit_warning_threshold_text", "0 B"
+        ),
         "prowlarr_enabled": stored.get("prowlarr_enabled", "0") == "1",
         "prowlarr_base_url": stored.get("prowlarr_base_url", ""),
         "prowlarr_api_key": stored.get("prowlarr_api_key", ""),
@@ -617,6 +629,7 @@ def update_app_options(
     homarr_session_endpoint="/api/auth/session",
     refresh_interval_minutes=60,
     http_timeout_seconds=10,
+    credit_warning_threshold="0 B",
     prowlarr_enabled=False,
     prowlarr_base_url="",
     prowlarr_api_key="",
@@ -630,6 +643,7 @@ def update_app_options(
         clean_timeout = max(1.0, float(http_timeout_seconds))
     except (TypeError, ValueError):
         clean_timeout = 10.0
+    credit_warning_text = str(credit_warning_threshold).strip() or "0 B"
     settings = {
         "iframe_enabled": "1" if iframe_enabled else "0",
         "homarr_auth_enabled": "1" if homarr_auth_enabled else "0",
@@ -637,6 +651,8 @@ def update_app_options(
         "homarr_session_endpoint": str(homarr_session_endpoint).strip() or "/api/auth/session",
         "refresh_interval_seconds": str(refresh_interval_seconds),
         "http_timeout_seconds": str(clean_timeout),
+        "credit_warning_threshold": str(max(0, parse_bytes(credit_warning_text))),
+        "credit_warning_threshold_text": credit_warning_text,
         "prowlarr_enabled": "1" if prowlarr_enabled else "0",
         "prowlarr_base_url": str(prowlarr_base_url).strip().rstrip("/"),
         "prowlarr_api_key": str(prowlarr_api_key).strip(),
@@ -906,6 +922,7 @@ def load_tracker_configuration(domains=()):
             "visible_widget": bool(row["visible_widget"]),
             "uploaded_add": int(row["buffer_uploaded"]),
             "downloaded_add": int(row["buffer_downloaded"]),
+            "minimum_ratio": float(row["minimum_ratio"]),
             "event_uploaded_multiplier": float(row["event_uploaded_multiplier"]),
             "event_downloaded_multiplier": float(row["event_downloaded_multiplier"]),
             "event_uploaded_expires_at": row["event_uploaded_expires_at"],
@@ -947,6 +964,7 @@ def list_trackers():
             "buffer_downloaded": int(row["buffer_downloaded"]),
             "buffer_uploaded_text": row["buffer_uploaded_text"],
             "buffer_downloaded_text": row["buffer_downloaded_text"],
+            "minimum_ratio": float(row["minimum_ratio"]),
             "event_uploaded_multiplier": float(row["event_uploaded_multiplier"]),
             "event_downloaded_multiplier": float(row["event_downloaded_multiplier"]),
             "event_uploaded_expires_at": row["event_uploaded_expires_at"] or "",
@@ -1195,6 +1213,7 @@ def update_trackers(updates):
                 SET display_name = ?, visible_dashboard = ?, visible_widget = ?,
                     buffer_uploaded = ?, buffer_downloaded = ?,
                     buffer_uploaded_text = ?, buffer_downloaded_text = ?,
+                    minimum_ratio = ?,
                     event_uploaded_multiplier = ?, event_downloaded_multiplier = ?,
                     event_uploaded_expires_at = ?, event_downloaded_expires_at = ?
                 WHERE key = ?
@@ -1207,6 +1226,7 @@ def update_trackers(updates):
                     parse_bytes(downloaded_text),
                     uploaded_text,
                     downloaded_text,
+                    max(0.01, float(values.get("minimum_ratio", 1) or 1)),
                     float(values.get("event_uploaded_multiplier", 1)),
                     float(values.get("event_downloaded_multiplier", 1)),
                     _updated_event_expiry(values, "uploaded"),

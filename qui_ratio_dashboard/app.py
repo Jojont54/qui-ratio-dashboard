@@ -58,7 +58,11 @@ def refresh_rows(require_all_clients=False):
 
 def cached_rows():
     domain_rows, legacy_adjustments = stored_domain_rows()
-    return aggregate_tracker_rows(domain_rows, legacy_adjustments)
+    return aggregate_tracker_rows(
+        domain_rows,
+        legacy_adjustments,
+        get_app_options()["credit_warning_threshold"],
+    )
 
 
 def _raw_totals_by_tracker():
@@ -235,7 +239,11 @@ def _refresh_rows_locked(require_all_clients=False):
     )
     clear_tracker_buffers(replaced_keys)
     complete_client_initializations(initialized_clients)
-    rows = aggregate_tracker_rows(domain_rows, legacy_adjustments)
+    rows = aggregate_tracker_rows(
+        domain_rows,
+        legacy_adjustments,
+        options["credit_warning_threshold"],
+    )
     if errors:
         message = "Unable to collect some clients: " + "; ".join(errors)
         log_event("refresh.partial", errors="; ".join(errors), rows=len(rows))
@@ -368,6 +376,7 @@ def save_tracker_settings():
             "visible_widget": request.form.get(f"widget__{key}") == "on",
             "uploaded_add": request.form.get(f"upload__{key}", "0"),
             "downloaded_add": request.form.get(f"download__{key}", "0"),
+            "minimum_ratio": request.form.get(f"minimum_ratio__{key}", "1"),
             "uploaded_target": request.form.get(f"site_upload__{key}", ""),
             "downloaded_target": request.form.get(f"site_download__{key}", ""),
             "raw_uploaded": raw["uploaded"],
@@ -617,6 +626,21 @@ def save_options():
     prowlarr_api_key = request.form.get("prowlarr_api_key", "").strip()
     if not prowlarr_api_key:
         prowlarr_api_key = current_options["prowlarr_api_key"]
+    credit_warning_threshold = request.form.get("credit_warning_threshold", "0 B")
+    if credit_warning_threshold.strip() and not has_byte_unit(credit_warning_threshold):
+        return (
+            render_template(
+                "options.html",
+                options=current_options | {
+                    "credit_warning_threshold_text": credit_warning_threshold
+                },
+                save_error=(
+                    "Unité manquante pour le crédit minimum d'alerte : ajoutez "
+                    "une unité comme GiB, Gio, Go, GB, G, TiB, Tio, To, TB ou T."
+                ),
+            ),
+            400,
+        )
     update_app_options(
         request.form.get("iframe_enabled") == "on",
         request.form.get("homarr_auth_enabled") == "on",
@@ -624,6 +648,7 @@ def save_options():
         request.form.get("homarr_session_endpoint", "/api/auth/session"),
         request.form.get("refresh_interval_minutes", "60"),
         request.form.get("http_timeout_seconds", "10"),
+        credit_warning_threshold,
         request.form.get("prowlarr_enabled") == "on",
         request.form.get("prowlarr_base_url", ""),
         prowlarr_api_key,
@@ -634,6 +659,7 @@ def save_options():
         homarr_auth_enabled=request.form.get("homarr_auth_enabled") == "on",
         prowlarr_enabled=request.form.get("prowlarr_enabled") == "on",
         refresh_interval_minutes=request.form.get("refresh_interval_minutes", "60"),
+        credit_warning_threshold=credit_warning_threshold,
     )
     _refresh_wake.set()
     return redirect(url_for("options"))

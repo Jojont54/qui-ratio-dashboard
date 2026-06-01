@@ -69,23 +69,22 @@
 <body class="widget-body">
   <h1 class="widget-title">Tracker Ratios</h1>
   <div class="widget-table">
-    <table class="data-table">
+    <table class="data-table" data-sortable>
       <thead>
         <tr>
-          <th>Tracker</th><th>Upload</th><th>Download</th><th>Ratio</th><th>Delta</th><th>#</th><th>Total</th>
+          <th data-sort-type="text">Tracker</th><th data-sort-type="number">Upload</th><th data-sort-type="number">Download</th><th data-sort-type="number">Ratio</th><th data-sort-type="number">Crédit</th><th data-sort-type="number">#</th><th data-sort-type="number">Total</th>
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
-        {% set ratio_class = "good" if row.ratio == infinity or row.ratio >= 1.5 else ("warn" if row.ratio >= 1 else "danger") %}
         <tr>
-          <td class="strong">{{ row.tracker }}</td>
-          <td>{{ fmt_bytes(row.uploaded) }}</td>
-          <td>{{ fmt_bytes(row.downloaded) }}</td>
-          <td><span class="ratio {{ ratio_class }}">{{ "inf" if row.ratio == infinity else "%.2f"|format(row.ratio) }}</span></td>
-          <td>{{ fmt_bytes(row.delta) }}</td>
-          <td>{{ row.count }}</td>
-          <td>{{ fmt_bytes(row.total_size) }}</td>
+          <td class="strong" data-sort-value="{{ row.tracker }}">{{ row.tracker }}</td>
+          <td data-sort-value="{{ row.uploaded }}">{{ fmt_bytes(row.uploaded) }}</td>
+          <td data-sort-value="{{ row.downloaded }}">{{ fmt_bytes(row.downloaded) }}</td>
+          <td data-sort-value="{{ 'inf' if row.ratio == infinity else row.ratio }}"><span class="ratio {{ row.ratio_class }}" title="Ratio minimum : {{ '%.2f'|format(row.minimum_ratio) }}">{{ "inf" if row.ratio == infinity else "%.2f"|format(row.ratio) }}</span></td>
+          <td data-sort-value="{{ row.ratio_margin }}"><span class="ratio {{ row.ratio_margin_class }}" title="Téléchargement restant avant ratio minimum : {{ '%.2f'|format(row.minimum_ratio) }}">{{ fmt_bytes(row.ratio_margin) }}</span></td>
+          <td data-sort-value="{{ row.count }}">{{ row.count }}</td>
+          <td data-sort-value="{{ row.total_size }}">{{ fmt_bytes(row.total_size) }}</td>
         </tr>
         {% else %}
         <tr><td class="empty" colspan="7">Aucune donnée disponible.</td></tr>
@@ -93,5 +92,6 @@
       </tbody>
     </table>
   </div>
+  <script src="{{ url_for('static', filename='sortable-table.js') }}"></script>
 </body>
 </html>
