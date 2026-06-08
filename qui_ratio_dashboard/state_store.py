@@ -1,5 +1,6 @@
 import json
 import os
+from decimal import Decimal, ROUND_FLOOR
 from threading import Lock
 
 STATE_PATH = "/data/state.json"
@@ -144,6 +145,18 @@ def _credited_transfer(tracker, current_uploaded, current_downloaded):
             "raw_downloaded": int(tracker.get("raw_downloaded", current_downloaded)),
             "credited_uploaded": int(tracker["credited_uploaded"]),
             "credited_downloaded": int(tracker["credited_downloaded"]),
+            "torrent_upload_multiplier": str(
+                tracker.get("torrent_upload_multiplier", 1)
+            ),
+            "torrent_download_multiplier": str(
+                tracker.get("torrent_download_multiplier", 1)
+            ),
+            "credited_uploaded_remainder": str(
+                tracker.get("credited_uploaded_remainder", 0)
+            ),
+            "credited_downloaded_remainder": str(
+                tracker.get("credited_downloaded_remainder", 0)
+            ),
         }
 
     migrated = _migrate_tracker_state(tracker, current_uploaded, current_downloaded)
@@ -152,11 +165,24 @@ def _credited_transfer(tracker, current_uploaded, current_downloaded):
         "raw_downloaded": migrated["raw_downloaded"],
         "credited_uploaded": migrated["raw_uploaded"] + migrated["carried_uploaded"],
         "credited_downloaded": migrated["raw_downloaded"] + migrated["carried_downloaded"],
+        "torrent_upload_multiplier": "1",
+        "torrent_download_multiplier": "1",
+        "credited_uploaded_remainder": "0",
+        "credited_downloaded_remainder": "0",
     }
 
 
-def _credited_delta(value, multiplier):
-    return int(round(int(value) * float(multiplier)))
+def _credited_delta(value, multiplier, remainder=0):
+    total = Decimal(int(value)) * Decimal(str(multiplier)) + Decimal(str(remainder or 0))
+    credited = int(total.to_integral_value(rounding=ROUND_FLOOR))
+    return credited, str(total - Decimal(credited))
+
+
+def _multiplier_correction(raw_value, previous_multiplier, current_multiplier):
+    delta = Decimal(int(raw_value)) * (
+        Decimal(str(current_multiplier)) - Decimal(str(previous_multiplier))
+    )
+    return int(delta.to_integral_value(rounding=ROUND_FLOOR))
 
 
 def _client_id_for_transfer(ledger_key, transfer):
@@ -253,6 +279,8 @@ def apply_domain_ledger(
                     "raw_downloaded": int(row["downloaded"]),
                     "credited_uploaded": 0,
                     "credited_downloaded": 0,
+                    "torrent_upload_multiplier": str(row.get("upload_multiplier", 1)),
+                    "torrent_download_multiplier": str(row.get("download_multiplier", 1)),
                     "domain": row["domain"],
                 }
                 migrated_previous_keys.add(previous_ledger_key)
@@ -300,6 +328,7 @@ def apply_domain_ledger(
                         "manual_buffer_downloaded": 0,
                         "count": 0,
                         "total_size": 0,
+                        "preserve_history": True,
                     }
                 )
 
@@ -310,8 +339,10 @@ def apply_domain_ledger(
             current_d = int(row["downloaded"])
             key = domain_to_key.get(domain, domain)
             config = trackers.get(key, {})
-            multiplier_u = float(config.get("event_uploaded_multiplier", 1))
-            multiplier_d = float(config.get("event_downloaded_multiplier", 1))
+            row_multiplier_u = Decimal(str(row.get("upload_multiplier", 1)))
+            row_multiplier_d = Decimal(str(row.get("download_multiplier", 1)))
+            multiplier_u = Decimal(str(config.get("event_uploaded_multiplier", 1))) * row_multiplier_u
+            multiplier_d = Decimal(str(config.get("event_downloaded_multiplier", 1))) * row_multiplier_d
             initialization = initialization_by_ledger.get(ledger_key)
             if initialization == "preserve" and not replace_all:
                 existing = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
@@ -324,35 +355,99 @@ def apply_domain_ledger(
                     "credited_downloaded": (
                         existing["credited_downloaded"] if ledger_key in transfers else 0
                     ),
+                    "torrent_upload_multiplier": str(row_multiplier_u),
+                    "torrent_download_multiplier": str(row_multiplier_d),
+                    "credited_uploaded_remainder": existing.get("credited_uploaded_remainder", "0"),
+                    "credited_downloaded_remainder": existing.get("credited_downloaded_remainder", "0"),
                 }
             elif initialization == "add" and not replace_all:
                 existing = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
+                credited_u, remainder_u = _credited_delta(current_u, multiplier_u)
+                credited_d, remainder_d = _credited_delta(current_d, multiplier_d)
                 tracker = {
                     "raw_uploaded": current_u,
                     "raw_downloaded": current_d,
                     "credited_uploaded": (
                         existing["credited_uploaded"] if ledger_key in transfers else 0
                     )
-                    + current_u,
+                    + credited_u,
                     "credited_downloaded": (
                         existing["credited_downloaded"] if ledger_key in transfers else 0
                     )
-                    + current_d,
+                    + credited_d,
+                    "torrent_upload_multiplier": str(row_multiplier_u),
+                    "torrent_download_multiplier": str(row_multiplier_d),
+                    "credited_uploaded_remainder": remainder_u,
+                    "credited_downloaded_remainder": remainder_d,
+                }
+            elif ledger_key not in transfers:
+                credited_u, remainder_u = _credited_delta(current_u, row_multiplier_u)
+                credited_d, remainder_d = _credited_delta(current_d, row_multiplier_d)
+                tracker = {
+                    "raw_uploaded": current_u,
+                    "raw_downloaded": current_d,
+                    "credited_uploaded": credited_u,
+                    "credited_downloaded": credited_d,
+                    "torrent_upload_multiplier": str(row_multiplier_u),
+                    "torrent_download_multiplier": str(row_multiplier_d),
+                    "credited_uploaded_remainder": remainder_u,
+                    "credited_downloaded_remainder": remainder_d,
                 }
             else:
                 tracker = _credited_transfer(transfers.get(ledger_key, {}), current_u, current_d)
+            if row.get("preserve_history") and ":torrent:" in str(ledger_key):
+                current_u = tracker["raw_uploaded"]
+                current_d = tracker["raw_downloaded"]
             previous_u = tracker["raw_uploaded"]
             previous_d = tracker["raw_downloaded"]
+            previous_row_multiplier_u = Decimal(str(tracker.get("torrent_upload_multiplier", 1)))
+            previous_row_multiplier_d = Decimal(str(tracker.get("torrent_download_multiplier", 1)))
+            can_apply_decrease = (
+                ":torrent:" in str(ledger_key) and not row.get("preserve_history")
+            )
+            if (
+                can_apply_decrease
+                and row_multiplier_u != previous_row_multiplier_u
+            ):
+                tracker["credited_uploaded"] += _multiplier_correction(
+                    previous_u, previous_row_multiplier_u, row_multiplier_u
+                )
+                tracker["credited_uploaded_remainder"] = "0"
+            if (
+                can_apply_decrease
+                and row_multiplier_d != previous_row_multiplier_d
+            ):
+                tracker["credited_downloaded"] += _multiplier_correction(
+                    previous_d, previous_row_multiplier_d, row_multiplier_d
+                )
+                tracker["credited_downloaded_remainder"] = "0"
             if current_u > previous_u:
-                tracker["credited_uploaded"] += _credited_delta(
-                    current_u - previous_u, multiplier_u
+                delta, remainder = _credited_delta(
+                    current_u - previous_u,
+                    multiplier_u,
+                    tracker.get("credited_uploaded_remainder", 0),
                 )
+                tracker["credited_uploaded"] += delta
+                tracker["credited_uploaded_remainder"] = remainder
+            elif current_u < previous_u and can_apply_decrease:
+                tracker["credited_uploaded"] += current_u - previous_u
+                tracker["credited_uploaded_remainder"] = "0"
             if current_d > previous_d:
-                tracker["credited_downloaded"] += _credited_delta(
-                    current_d - previous_d, multiplier_d
+                delta, remainder = _credited_delta(
+                    current_d - previous_d,
+                    multiplier_d,
+                    tracker.get("credited_downloaded_remainder", 0),
                 )
+                tracker["credited_downloaded"] += delta
+                tracker["credited_downloaded_remainder"] = remainder
+            elif current_d < previous_d and can_apply_decrease:
+                tracker["credited_downloaded"] += current_d - previous_d
+                tracker["credited_downloaded_remainder"] = "0"
             tracker["raw_uploaded"] = current_u
             tracker["raw_downloaded"] = current_d
+            if not row.get("preserve_history"):
+                tracker["torrent_upload_multiplier"] = str(row_multiplier_u)
+                tracker["torrent_download_multiplier"] = str(row_multiplier_d)
             tracker["domain"] = domain
             if row.get("client_id") is not None:
                 tracker["client_id"] = row["client_id"]

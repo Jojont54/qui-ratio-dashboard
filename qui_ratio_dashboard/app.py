@@ -396,6 +396,40 @@ def save_tracker_settings():
     prefix = "display__"
     keys = [name[len(prefix):] for name in request.form if name.startswith(prefix)]
     current_settings = {tracker["key"]: tracker for tracker in list_trackers()}
+    target_requested = any(
+        str(request.form.get(f"site_upload__{key}", "")).strip()
+        or str(request.form.get(f"site_download__{key}", "")).strip()
+        for key in keys
+    )
+    event_changed = any(
+        float(request.form.get(f"event_upload__{key}", "1"))
+        != current_settings.get(key, {}).get("event_uploaded_multiplier", 1)
+        or float(request.form.get(f"event_download__{key}", "1"))
+        != current_settings.get(key, {}).get("event_downloaded_multiplier", 1)
+        for key in keys
+    )
+    if target_requested or event_changed:
+        try:
+            refresh_rows(require_all_clients=True)
+        except Exception as error:
+            app.logger.exception("Unable to collect a fresh tracker baseline")
+            reason = (
+                "Valeur site non appliquée : impossible de relever toutes les "
+                "sources avant de calculer le buffer."
+            )
+            if event_changed:
+                reason = (
+                    "Événement non activé : impossible de relever toutes les "
+                    "sources avant son démarrage."
+                )
+            return (
+                render_template(
+                    "trackers.html",
+                    trackers=list_trackers(),
+                    save_error=f"{reason} Réessayez lorsque les clients sont disponibles. ({error})",
+                ),
+                503,
+            )
     raw_totals = _raw_totals_by_tracker()
     updates = {}
     for key in keys:
@@ -432,30 +466,6 @@ def save_tracker_settings():
             ),
             400,
         )
-    event_changed = any(
-        float(values["event_uploaded_multiplier"])
-        != current_settings.get(key, {}).get("event_uploaded_multiplier", 1)
-        or float(values["event_downloaded_multiplier"])
-        != current_settings.get(key, {}).get("event_downloaded_multiplier", 1)
-        for key, values in updates.items()
-    )
-    if event_changed:
-        try:
-            refresh_rows(require_all_clients=True)
-        except Exception as error:
-            app.logger.exception("Unable to collect an event-change baseline")
-            return (
-                render_template(
-                    "trackers.html",
-                    trackers=list_trackers(),
-                    save_error=(
-                        "Événement non activé : impossible de relever toutes les "
-                        "sources avant son démarrage. Réessayez lorsque les clients "
-                        f"sont disponibles. ({error})"
-                    ),
-                ),
-                503,
-            )
     update_trackers(updates)
     log_event("trackers.settings.saved", count=len(updates))
     return redirect(url_for("trackers"))

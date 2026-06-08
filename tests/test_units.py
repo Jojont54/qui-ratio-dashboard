@@ -29,6 +29,12 @@ class UnitParsingTests(unittest.TestCase):
         self.assertEqual(parse_bytes("1,5 To"), int(1.5 * 1024**4))
         self.assertEqual(parse_bytes("2,25 Gio"), int(2.25 * 1024**3))
 
+    def test_adjacent_units_keep_binary_1024_ratio(self):
+        self.assertEqual(parse_bytes("1 Go"), parse_bytes("1024 Mo"))
+        self.assertEqual(parse_bytes("1 GiB"), parse_bytes("1024 MiB"))
+        self.assertEqual(parse_bytes("1 To"), parse_bytes("1024 Go"))
+        self.assertEqual(parse_bytes("1 TiB"), parse_bytes("1024 GiB"))
+
     def test_missing_unit_can_be_detected_for_user_input(self):
         self.assertFalse(has_byte_unit("10"))
         self.assertFalse(has_byte_unit("10,5"))

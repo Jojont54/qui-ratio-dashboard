@@ -58,6 +58,24 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(transfer["uploaded"], 200)
         self.assertEqual(transfer["downloaded"], 0)
 
+    def test_torrent_rows_keep_client_bytes_raw_for_the_ledger(self):
+        rows = collector.torrent_rows(
+            [
+                {
+                    "hash": "abc",
+                    "tracker": "tracker.example",
+                    "uploaded": 100,
+                    "downloaded": 50,
+                }
+            ],
+            {"abc": {"upload_multiplier": 2, "download_multiplier": 0}},
+        )
+
+        self.assertEqual(rows[0]["uploaded"], 100)
+        self.assertEqual(rows[0]["downloaded"], 50)
+        self.assertEqual(rows[0]["upload_multiplier"], 2)
+        self.assertEqual(rows[0]["download_multiplier"], 0)
+
     def test_qbittorrent_pseudo_tracker_is_not_exposed_as_a_tracker(self):
         payload = collector.torrent_summary(
             [{"tracker": "** [DHT] **", "uploaded": 100, "downloaded": 50}]

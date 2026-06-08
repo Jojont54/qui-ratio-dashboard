@@ -46,7 +46,7 @@ def prowlarr_lookup_hashes(hashes, rules_by_hash, recent_hashes, max_attempts=3)
     return sorted(checks)
 
 
-def torrent_rows(transfers, rules_by_hash=None):
+def torrent_rows(transfers, rules_by_hash=None, apply_multipliers=False):
     rules_by_hash = rules_by_hash or {}
     rows = []
     for transfer in transfers:
@@ -61,14 +61,20 @@ def torrent_rows(transfers, rules_by_hash=None):
         download_multiplier = float(
             transfer.get("download_multiplier", rule.get("download_multiplier", 1))
         )
+        credited_uploaded = int(round(uploaded * upload_multiplier)) if apply_multipliers else uploaded
+        credited_downloaded = (
+            int(round(downloaded * download_multiplier)) if apply_multipliers else downloaded
+        )
         rows.append(
             {
                 "tracker": domain,
                 "_key": domain,
                 "domain": domain,
                 "hash": torrent_hash,
-                "uploaded": int(round(uploaded * upload_multiplier)),
-                "downloaded": int(round(downloaded * download_multiplier)),
+                "uploaded": credited_uploaded,
+                "downloaded": credited_downloaded,
+                "upload_multiplier": upload_multiplier,
+                "download_multiplier": download_multiplier,
                 "manual_buffer_uploaded": 0,
                 "manual_buffer_downloaded": 0,
                 "count": 1,
@@ -80,7 +86,7 @@ def torrent_rows(transfers, rules_by_hash=None):
 
 def torrent_summary(transfers, rules_by_hash=None):
     aggregated = {}
-    for row in torrent_rows(transfers, rules_by_hash):
+    for row in torrent_rows(transfers, rules_by_hash, apply_multipliers=True):
         domain = row["domain"]
         totals = aggregated.setdefault(
             domain,

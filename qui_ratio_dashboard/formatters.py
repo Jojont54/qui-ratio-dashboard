@@ -109,9 +109,18 @@ def aggregate_tracker_rows(
     for key, config in trackers.items():
         if key == "tracker_name":
             continue
-        if int(config.get("uploaded_add", 0)) or int(config.get("downloaded_add", 0)):
+        if (
+            int(config.get("uploaded_add", 0))
+            or int(config.get("downloaded_add", 0))
+        ):
             aggregate.setdefault(
-                key, {"uploaded": 0, "downloaded": 0, "total_size": 0, "count": 0}
+                key,
+                {
+                    "uploaded": 0,
+                    "downloaded": 0,
+                    "total_size": 0,
+                    "count": 0,
+                },
             )
 
     rows = []

@@ -220,6 +220,34 @@ class ProwlarrAccountingSimulationTests(unittest.TestCase):
         self.assertEqual((progressed["uploaded"], progressed["downloaded"]), (62, 140))
         self.assertEqual(progressed["count"], 1)
 
+    def test_removed_torrent_reappearing_with_same_hash_is_not_counted_twice(self):
+        first = self.refresh(
+            [
+                {
+                    "hash": "same",
+                    "tracker": "tracker.example",
+                    "uploaded": 50,
+                    "downloaded": 100,
+                }
+            ]
+        )
+        removed = self.refresh([])
+        reappeared = self.refresh(
+            [
+                {
+                    "hash": "same",
+                    "tracker": "tracker.example",
+                    "uploaded": 55,
+                    "downloaded": 105,
+                }
+            ]
+        )
+
+        self.assertEqual((first["uploaded"], first["downloaded"]), (50, 100))
+        self.assertEqual((removed["uploaded"], removed["downloaded"]), (50, 100))
+        self.assertEqual((reappeared["uploaded"], reappeared["downloaded"]), (55, 105))
+        self.assertEqual(reappeared["count"], 1)
+
     def test_existing_aggregated_client_history_is_not_counted_again_after_upgrade(self):
         old_row = {
             "tracker": "tracker.example",

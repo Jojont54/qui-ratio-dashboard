@@ -132,6 +132,61 @@ class DomainLedgerTests(unittest.TestCase):
         self.assertEqual(rows[0]["uploaded"], 130)
         self.assertEqual(rows[0]["downloaded"], 55)
 
+    def test_fractional_event_credit_keeps_remainder_between_refreshes(self):
+        settings = {
+            "sample": {
+                "event_uploaded_multiplier": 1,
+                "event_downloaded_multiplier": 0.5,
+            }
+        }
+        state_store.apply_domain_ledger(
+            [self.domain_row("tracker.sample.example", 0, 0)],
+            {"tracker.sample.example": "sample"},
+            settings,
+        )
+
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [self.domain_row("tracker.sample.example", 0, 1)],
+            {"tracker.sample.example": "sample"},
+            settings,
+        )
+        self.assertEqual(rows[0]["downloaded"], 0)
+
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [self.domain_row("tracker.sample.example", 0, 2)],
+            {"tracker.sample.example": "sample"},
+            settings,
+        )
+        self.assertEqual(rows[0]["downloaded"], 1)
+
+    def test_late_freeleech_correction_removes_previously_counted_download(self):
+        first = self.client_row(1, 10, 100)
+        first["ledger_key"] = "client:1:torrent:abc"
+        state_store.apply_domain_ledger([first], {"tracker.example": "tracker"})
+
+        corrected = self.client_row(1, 20, 0)
+        corrected["ledger_key"] = "client:1:torrent:abc"
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [corrected], {"tracker.example": "tracker"}
+        )
+
+        self.assertEqual(rows[0]["uploaded"], 20)
+        self.assertEqual(rows[0]["downloaded"], 0)
+
+    def test_late_double_upload_correction_does_not_count_current_delta_twice(self):
+        first = self.client_row(1, 10, 0)
+        first["ledger_key"] = "client:1:torrent:abc"
+        state_store.apply_domain_ledger([first], {"tracker.example": "tracker"})
+
+        corrected = self.client_row(1, 15, 0)
+        corrected["ledger_key"] = "client:1:torrent:abc"
+        corrected["upload_multiplier"] = 2
+        rows, _, _, _ = state_store.apply_domain_ledger(
+            [corrected], {"tracker.example": "tracker"}
+        )
+
+        self.assertEqual(rows[0]["uploaded"], 30)
+
     def test_each_client_keeps_its_own_history_for_the_same_domain(self):
         first = self.domain_row("tracker.example", 100, 30)
         first["ledger_key"] = "client:1:tracker.example"

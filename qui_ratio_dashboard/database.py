@@ -69,12 +69,14 @@ def _updated_event_expiry(values, direction):
     return _expiry_from_hours(multiplier, hours)
 
 
-def _updated_buffer_text(values, direction):
+def _updated_buffer_values(values, direction):
     target = str(values.get(f"{direction}_target", "")).strip()
     if target:
         raw_value = int(values.get(f"raw_{direction}", 0))
-        return fmt_bytes(parse_bytes(target) - raw_value)
-    return str(values.get(f"{direction}_add", "0 B")).strip() or "0 B"
+        buffer_value = parse_bytes(target) - raw_value
+        return buffer_value, fmt_bytes(buffer_value)
+    text = str(values.get(f"{direction}_add", "0 B")).strip() or "0 B"
+    return parse_bytes(text), text
 
 
 def _connect():
@@ -1205,8 +1207,8 @@ def update_trackers(updates):
     init_database()
     with _lock, _database() as connection:
         for key, values in updates.items():
-            uploaded_text = _updated_buffer_text(values, "uploaded")
-            downloaded_text = _updated_buffer_text(values, "downloaded")
+            uploaded_value, uploaded_text = _updated_buffer_values(values, "uploaded")
+            downloaded_value, downloaded_text = _updated_buffer_values(values, "downloaded")
             connection.execute(
                 """
                 UPDATE trackers
@@ -1222,8 +1224,8 @@ def update_trackers(updates):
                     str(values["display_name"]).strip() or key,
                     int(bool(values["visible_dashboard"])),
                     int(bool(values["visible_widget"])),
-                    parse_bytes(uploaded_text),
-                    parse_bytes(downloaded_text),
+                    uploaded_value,
+                    downloaded_value,
                     uploaded_text,
                     downloaded_text,
                     max(0.01, float(values.get("minimum_ratio", 1) or 1)),
