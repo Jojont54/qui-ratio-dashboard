@@ -107,7 +107,7 @@ image: ghcr.io/jojont54/qui-ratio-dashboard:develop
 Tagged beta releases publish a fixed image that will not change over time:
 
 ```yaml
-image: ghcr.io/jojont54/qui-ratio-dashboard:beta-v0.1.0
+image: ghcr.io/jojont54/qui-ratio-dashboard:beta-v0.1.6
 ```
 
 Use the fixed tag for an installation you want to update manually, and
